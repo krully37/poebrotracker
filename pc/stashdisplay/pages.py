@@ -120,7 +120,8 @@ def preset() -> list[dict]:
             "slots": {
                 "main": {"widget": "value", "metric": "session", "label": "Session gain",
                          "sub": "since {session_since} ({session_duration})", "color": "auto"},
-                "side": {"widget": "value", "metric": "div_price", "label": "Divine", "align": "right"},
+                "side": {"widget": "value", "metric": "div_price", "label": "Divine price",
+                         "sub": "chaos per divine", "align": "right"},
                 "chart": {"widget": "sparkline", "series": "session"},
                 "footer": {"widget": "text", "text": "Best hour today {best_hour}  ·  Rate {rate}", "color": "#8A8F98"},
             },
