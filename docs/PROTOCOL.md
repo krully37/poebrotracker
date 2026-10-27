@@ -40,7 +40,7 @@ COBS( type:u8 | seq:u16 LE | payload | crc32:u32 LE ) 0x00
 | 0x08 | PING | PC → screen | `{}`: heartbeat |
 | 0x09 | EVENT_ACK | PC → screen | empty. The seq is the event's. |
 | 0x81 | ACK | screen → PC | `{"ok": true, ...}` or `{"ok": false, "error": "..."}`. The seq is the request's. |
-| 0x82 | EVENT | screen → PC | `{"type": "tap" \| "page" \| "reset", "page": id, "action"?}` |
+| 0x82 | EVENT | screen → PC | `{"type": "tap" \| "page" \| "reset", "page": id, "action"?}`. A tap carries `action` when it lands in a tap zone. |
 | 0x83 | LOG | screen → PC | `{"text"}`: debug output, not acknowledged |
 
 **Inventory** (the ACK to HELLO):
@@ -54,7 +54,9 @@ The PC compares this with what it wants on the screen and only sends what differ
 
 **Page entries in PAGES:**
 - `bg` is either `{"color": "#rrggbb"}` or `{"file": "<file id>", "color": "#rrggbb"}`. The colour is the fallback if the file is missing.
-- `zones` lists `{"x", "y", "w", "h", "action"}` rectangles where a long press resets something. `action` is `"reset_session"` or `"reset_rate"`.
+- `zones` lists `{"x", "y", "w", "h", "action", "gesture"?}` rectangles the screen reacts to.
+  - `"gesture": "hold"` (the default when missing): a long press resets something. `action` is `"reset_session"` or `"reset_rate"`.
+  - `"gesture": "tap"`: a tap runs a button of the media card. `action` is `"media_prev"`, `"media_toggle"` or `"media_next"`. No ring is drawn there, and a long press does nothing.
 - Overlays for pages no longer listed are discarded. The current page is kept by id if it still exists, else the screen shows the first page.
 
 **Transfers:**
@@ -84,7 +86,7 @@ zlib stream (with header) of:
 |---|---|
 | Heartbeat | The PC sends something at least every **30 s** (PING when idle), and re-renders every page once a minute. |
 | Offline | **90 s** without a valid frame: "PC disconnected" screen (built into the firmware), backlight at **30 %**. Any valid frame brings full brightness back. Before the first frame: "Waiting for the PC". |
-| Tap | Under **0.4 s** and within **12 px** of the touch-down point: `EVENT tap`. The PC answers with a refresh, or a "Too soon" toast. |
+| Tap | Under **0.4 s** and within **12 px** of the touch-down point: `EVENT tap`. Inside a tap zone (judged at touch-down) the event carries the zone's `action`, and the PC runs that media button; the card is re-sent once the player has changed. Elsewhere the PC answers with a refresh, or a "Too soon" toast. |
 | Swipe | At least **60 px** horizontally, more horizontal than vertical: next (left) or previous (right) page, wrapping around. **0.28 s** slide, ease-out. Then `EVENT page`. |
 | Long press | Held still **0.4 s** inside a zone: a ring of radius **30 px** appears around the finger and fills clockwise over **1.5 s**. Moving or lifting cancels it. When it closes: `EVENT reset` with the zone's action. The PC resets the value and sends a toast. Outside any zone, a long press does nothing. |
 | Dots | Drawn by the screen at the bottom (y = 311), or an "n/N" counter above 8 pages. |

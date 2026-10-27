@@ -14,6 +14,7 @@ from stashdisplay.link.simulator import SimRunner, SimScreen
 from stashdisplay.link.transport import LoopbackPair
 from stashdisplay.media import MediaStore
 from stashdisplay.render import renderer
+from stashdisplay.render.templates import TEMPLATES
 from stashdisplay.settings import Store
 
 
@@ -148,6 +149,21 @@ def test_gestures_send_events(rig):
     assert r.events[-1] == {"type": "reset", "action": "reset_rate", "page": "a"}
 
 
+def test_tap_zone_sends_its_action_and_never_a_reset(rig):
+    zone = {"x": 0, "y": 200, "w": 160, "h": 60, "action": "media_toggle", "gesture": "tap"}
+    r = rig(Content([page("a", zones=[zone])], {}))
+    wait_for(lambda: r.sim.pages)
+    r.sim.touch_down(80, 230)
+    r.sim.touch_up(80, 230)
+    wait_for(lambda: r.events)
+    assert r.events == [{"type": "tap", "page": "a", "action": "media_toggle"}]
+    r.sim.touch_down(80, 230)  # a long press on a button: no ring, no event
+    time.sleep(p.PRESS_DELAY + p.RING_FILL + 0.2)
+    r.sim.touch_up(80, 230)
+    time.sleep(0.3)
+    assert len(r.events) == 1
+
+
 def test_long_press_released_early_or_outside_a_zone_does_nothing(rig):
     r = rig(Content([page("a", zones=[{"x": 0, "y": 0, "w": 100, "h": 100, "action": "reset_session"}])], {}))
     wait_for(lambda: r.sim.pages)
@@ -239,6 +255,42 @@ def test_app_tap_and_resets(tmp_path):
     data, _ = app.render_data()
     assert abs(data.metrics["session"]) < 1e-9
     assert toasts[-2:] == ["Div/h reset", "Session reset"]
+
+
+def test_app_media_taps_run_the_player_not_a_refresh(tmp_path):
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    toasts, syncs = [], []
+    app.toast = toasts.append
+    app._screen_sync = lambda: syncs.append(1)
+    app.start_player(fake=True)
+    first = app.player.now()
+    assert first.playing and app.render_data()[0].media == first
+    app.on_screen_event({"type": "tap", "page": "x", "action": "media_toggle"})
+    assert not app.player.now().playing
+    app.on_screen_event({"type": "tap", "page": "x", "action": "media_next"})
+    assert app.player.now().title != first.title
+    app.on_screen_event({"type": "tap", "page": "x", "action": "media_prev"})
+    assert app.player.now().title == first.title
+    assert toasts == [] and syncs == []  # no page shows the card: nothing to send
+
+    app.store.update(pages=[{"id": "m", "template": "full", "slots": {"main": {"widget": "media"}}}])
+    app.on_screen_event({"type": "tap", "page": "m", "action": "media_toggle"})
+    assert syncs == [1]
+
+
+def test_media_zones_match_the_drawn_buttons():
+    for template, slot, frame in [("full", "main", "tooltip"), ("grid4", "top1", "plain"), ("split", "col2", "none")]:
+        pg = pagelib.normalize_page({"template": template, "slots": {slot: {"widget": "media", "frame": frame}}})
+        zones = pagelib.touch_zones(pg)
+        assert [z["action"] for z in zones] == ["media_prev", "media_toggle", "media_next"]
+        assert all(z["gesture"] == "tap" for z in zones)
+        cell = TEMPLATES[template].slots[slot]
+        for z in zones:  # inside the slot, side by side, big enough for a finger
+            assert cell.x <= z["x"] and z["x"] + z["w"] <= cell.x + cell.w
+            assert cell.y <= z["y"] and z["y"] + z["h"] <= cell.y + cell.h
+            assert z["h"] >= 24 and z["w"] >= 50
+    no_buttons = pagelib.normalize_page({"template": "full", "slots": {"main": {"widget": "media", "buttons": False}}})
+    assert pagelib.touch_zones(no_buttons) == []
 
 
 def test_touch_zones_only_on_resettable_values():

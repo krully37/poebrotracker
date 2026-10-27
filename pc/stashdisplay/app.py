@@ -21,6 +21,8 @@ from .link.client import Content, ScreenLink
 from .link.content import ContentBuilder
 from .link.transport import Port, SerialPort, candidate_ports
 from .media import MediaStore
+from .nowplaying import ACTIONS as MEDIA_ACTIONS
+from .nowplaying import Player, create_player
 from .render import data as renderdata
 from .render import fonts, renderer, theme
 from .settings import Store
@@ -53,6 +55,7 @@ class App:
         self.fake_log = None  # with --simulator: a test Client.txt the simulator page writes to
         self.anim_files: dict[str, tuple[str, float]] = {}  # event kind -> (screen file id, seconds)
         self._playing: tuple[str, float] | None = None  # (event kind, monotonic end)
+        self.player: Player | None = None  # what the PC plays, for the media card
 
     @classmethod
     def create(cls, offline: bool = False) -> "App":
@@ -82,8 +85,9 @@ class App:
         from .cli import demo_prices
 
         now = time.time()
+        media = self.player.now() if self.player else None
         if self.live_data is not None and not force_demo:
-            return dataclasses.replace(self.live_data, now=now), False
+            return dataclasses.replace(self.live_data, now=now, media=media), False
         with self._data_lock:
             self._demo_tick(now)
             snap = self.last_snapshot
@@ -92,7 +96,7 @@ class App:
                 self.history, snap, now=now, synced_at=snap.time, item_prices=demo_prices(snap.div_price),
                 spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon,
             )
-        return data, True
+        return dataclasses.replace(data, media=media), True
 
     # --- Screen ---------------------------------------------------------------------------
 
@@ -137,6 +141,10 @@ class App:
     def on_screen_event(self, event: dict) -> None:
         kind = event.get("type")
         now = time.time()
+        if kind == "tap" and event.get("action") in MEDIA_ACTIONS:
+            if self.player:
+                self.player.command(event["action"])  # the card follows through on_change
+            return
         if kind == "tap":
             with self._data_lock:
                 last = self.last_snapshot.time if self.last_snapshot else 0
@@ -154,6 +162,19 @@ class App:
                     self.history.rate_start = now
                 self.history.save()
             self.toast(TOASTS[event["action"]])
+            self._screen_sync()
+
+    # --- Media card ----------------------------------------------------------------------
+
+    def start_player(self, fake: bool = False) -> Player:
+        self.player = create_player(fake)
+        self.player.on_change = self._media_changed
+        return self.player.start()
+
+    def _media_changed(self) -> None:
+        """A new track, cover, or play/pause: update the screen, if a page shows the card."""
+        if any(slot and slot["widget"] == "media"
+               for page in self.store.pages if not page["hidden"] for slot in page["slots"].values()):
             self._screen_sync()
 
     # --- Game events ---------------------------------------------------------------------

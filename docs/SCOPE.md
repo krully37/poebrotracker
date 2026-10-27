@@ -72,6 +72,13 @@ A fourth example page, **League** (since league start, today, best hour, item pr
 - **Session/day stats**: gain today, best hour, and so on, from local history.
 - Text and clock (for layout).
 - **Notes** (added 2026-10-27): the friend's own text over several lines. Line breaks are kept, a line starting with "- " becomes a bullet, and placeholders are filled in. The text auto-fits the card by default, or uses a fixed size, and is cut with "…" when it cannot fit. A full-page note uses the "Single slot" template, below the page's top bar.
+- **Now playing** (added 2026-10-27): what the PC plays, with previous, play/pause and next buttons, each a single tap on the screen.
+  - Source: Windows' own media session (the one behind the volume flyout), which Spotify, browsers, VLC and most players publish to. Commands go through the same API, never as simulated key presses. No account or online service.
+  - Shows the cover art, title, and artist (or the player's name). Not the playback position: a progress bar would mean re-sending the card every second, and the real screen's speed is not known yet.
+  - The PC polls the session about once a second and re-sends the page when the track, the cover, or play/pause changes, and only if a visible page has the card.
+  - Buttons sit under the title, beside the cover, when each gets at least 50 px (about 8 mm); in narrower cards they take a row across the whole card.
+  - Outside Windows (the Mac, while developing) and with `--fake-media`, a pretend player stands in.
+  - The screen side is a new kind of touch zone, `"gesture": "tap"` (see `docs/PROTOCOL.md`).
 
 **Session** resets when the script starts and on a long press. It does not reset daily.
 

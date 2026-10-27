@@ -8,11 +8,15 @@ a PoE tooltip frame with the widget's title in its header, "plain" draws the
 frame without a header, "none" draws nothing.
 """
 
+import io
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import lru_cache
 from typing import Any
+
+from PIL import Image
 
 from . import draw
 from .data import METRICS, RenderData, fmt_amount, fmt_duration, fmt_metric
@@ -137,6 +141,14 @@ def label_size(box: Box) -> int:
     return int(min(16, max(11, box.h * 0.13)))
 
 
+def under_label(box: Box, label: str) -> Box:
+    """The space slot_label leaves under its label."""
+    if not label:
+        return box
+    used = label_size(box) + 2 + 8
+    return Box(box.x, box.y + used, box.w, box.h - used)
+
+
 def slot_label(ctx: Ctx, box: Box, label: str, align: str = "left") -> Box:
     """Small-caps label at the top of a slot; returns the space left under it."""
     if not label:
@@ -144,8 +156,7 @@ def slot_label(ctx: Ctx, box: Box, label: str, align: str = "left") -> Box:
     size = label_size(box) + 2
     lf = font(TITLE_FAMILY, size, 400)
     draw.text_in(ctx, Box(box.x, box.y, box.w, size), draw.truncate(label, lf, box.w), lf, LABEL, align, "top")
-    used = size + 8
-    return Box(box.x, box.y + used, box.w, box.h - used)
+    return under_label(box, label)
 
 
 def icon_room(cap: int) -> tuple[int, int]:
@@ -522,6 +533,132 @@ def render_notes(ctx: Ctx, box: Box, o: dict) -> None:
         if bullet:
             r, cx, cy = f.size * 0.13, x + indent * 0.35, row.y + row.h / 2
             draw.paint(ctx, GOLD, lambda d, cx=cx, cy=cy, r=r: d.ellipse(((cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k), fill=255), smooth=True)
+
+
+# --- Media card: what the PC plays, with buttons the screen sends back as taps ------------------
+
+MEDIA_BUTTONS = ("media_prev", "media_toggle", "media_next")
+MIN_BUTTON_W = 50  # px; the 3.5" panel has about 6.5 px per mm
+
+
+def media_layout(box: Box, cover: bool = True, buttons: bool = True) -> tuple[Box | None, Box, list[tuple[str, Box]]]:
+    """Cover (or None), text area, and the buttons as (action, box), inside the card's content box.
+
+    pages.touch_zones uses the same boxes for the screen's tap zones.
+    """
+    bh = int(min(64, max(24, box.h * 0.36)))
+    side = min(box.h, int(box.w * 0.38)) if cover and box.w >= 180 and box.h >= 56 else 0
+    # Buttons sit under the text, beside the cover, when each gets a finger's width (about
+    # 8 mm); otherwise they take a row across the whole card, under the cover and the text.
+    beside = not buttons or (box.w - (side + 10 if side else 0)) / 3 >= MIN_BUTTON_W
+    top_h = box.h if beside else box.h - bh - 4
+    if not beside:
+        side = min(top_h, int(box.w * 0.38)) if cover and top_h >= 40 else 0
+    cover_box = Box(box.x, box.y + (top_h - side) // 2, side, side) if side else None
+    x = box.x + (side + 10 if side else 0)
+    w = box.x + box.w - x
+    if not buttons:
+        return cover_box, Box(x, box.y, w, box.h), []
+    row_x, row_w, row_y = (x, w, box.y + box.h - bh) if beside else (box.x, box.w, box.y + box.h - bh)
+    third = row_w / 3
+    row = [(a, Box(int(row_x + i * third), row_y, int(third), bh)) for i, a in enumerate(MEDIA_BUTTONS)]
+    text = Box(x, box.y, w, max(0, row_y - box.y - 4) if beside else top_h)
+    return cover_box, text, row
+
+
+@lru_cache(maxsize=8)
+def _cover_image(data: bytes, side: int) -> Image.Image | None:
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            im = im.convert("RGBA")
+    except OSError:
+        return None
+    s = min(im.size)
+    left, top = (im.width - s) // 2, (im.height - s) // 2
+    return im.crop((left, top, left + s, top + s)).resize((side, side), Image.Resampling.LANCZOS)
+
+
+def _media_text(ctx: Ctx, box: Box, now) -> None:
+    if box.h < 12 or box.w < 30:
+        return
+    if now is None:
+        f = font(NAME_FAMILY, int(min(18, max(11, box.h * 0.3))), 400)
+        draw.text_in(ctx, box, draw.truncate("Nothing playing", f, box.w), f, MUTED, "left", "middle")
+        return
+    sub = now.artist or now.app
+    sub_h = int(min(18, max(10, box.h * 0.22))) if sub else 0
+    title_h = box.h - (sub_h + 4 if sub else 0)
+    most = 2 if title_h >= 56 else 1
+    # Shrink the title (down to about two thirds) to fit its lines, then cut what is left.
+    largest = int(min(26, max(10, title_h / most * 0.62)))
+    for size in range(largest, max(10, largest * 2 // 3) - 1, -1):
+        f = font(NAME_FAMILY, size, 400)
+        lines = [t for _, t, _ in note_lines([now.title], f, box.w)]
+        if len(lines) <= most:
+            break
+    if len(lines) > most:
+        lines = lines[:most - 1] + [" ".join(lines[most - 1:])]  # the last line takes the rest, cut below
+    line_h = note_line_height(f)
+    y = box.y + max(0, (box.h - len(lines) * line_h - (sub_h + 4 if sub else 0)) // 2)
+    for line in lines:
+        draw.text_in(ctx, Box(box.x, y, box.w, line_h), draw.truncate(line, f, box.w), f, WHITE, "left", "middle")
+        y += line_h
+    if sub:
+        sf = font(NAME_FAMILY, sub_h, 400)
+        draw.text_in(ctx, Box(box.x, y + 2, box.w, sub_h + 2), draw.truncate(sub, sf, box.w), sf, MUTED, "left", "middle")
+
+
+def _media_button(ctx: Ctx, b: Box, action: str, now) -> None:
+    """Previous, play/pause and next, drawn as shapes (Fontin has no such glyphs)."""
+    s = min(b.h * 0.42, b.w * 0.34)
+    cx, cy = b.x + b.w / 2, b.y + b.h / 2
+    enabled = now is not None and {"media_prev": now.can_prev, "media_next": now.can_next}.get(action, True)
+    color = WHITE if enabled else FAINT
+    k = draw.SUPERSAMPLE
+    polys, rects = [], []
+    if action == "media_toggle":
+        r = s * 0.95
+        draw.paint(ctx, GOLD if enabled else FAINT, lambda d: d.ellipse(
+            ((cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k), outline=255, width=2 * k), smooth=True)
+        if now is not None and now.playing:
+            bw, bh = s * 0.2, s * 0.9
+            rects += [(cx - bw * 1.4, cy - bh / 2, cx - bw * 0.4, cy + bh / 2), (cx + bw * 0.4, cy - bh / 2, cx + bw * 1.4, cy + bh / 2)]
+        else:
+            polys.append([(cx - s * 0.3, cy - s * 0.45), (cx + s * 0.45, cy), (cx - s * 0.3, cy + s * 0.45)])
+    else:
+        d = 1 if action == "media_next" else -1
+        polys.append([(cx - d * s * 0.4, cy - s * 0.4), (cx + d * s * 0.25, cy), (cx - d * s * 0.4, cy + s * 0.4)])
+        x0, x1 = sorted((cx + d * s * 0.27, cx + d * s * 0.42))
+        rects.append((x0, cy - s * 0.4, x1, cy + s * 0.4))
+
+    def shapes(dr):
+        for poly in polys:
+            dr.polygon([(x * k, y * k) for x, y in poly], fill=255)
+        for x0, y0, x1, y1 in rects:
+            dr.rectangle((x0 * k, y0 * k, x1 * k, y1 * k), fill=255)
+
+    draw.paint(ctx, color, shapes, smooth=True)
+
+
+@widget("media", "Now playing", "What the PC is playing (Spotify, a browser, most players), "
+        "with previous, play/pause and next buttons to tap on the screen.", [
+    Option("title", "text", "Now playing", "Title"),
+    Option("cover", "bool", True, "Cover art"),
+    Option("buttons", "bool", True, "Buttons"),
+])
+def render_media(ctx: Ctx, box: Box, o: dict) -> None:
+    box = list_title(ctx, box, o["title"])
+    now = ctx.data.media
+    cover, text, buttons = media_layout(box, o["cover"], o["buttons"])
+    if cover:
+        img = _cover_image(now.cover, cover.w) if now is not None and now.cover else None
+        if img is not None:
+            ctx.img.alpha_composite(img, (cover.x, cover.y))
+        else:
+            draw.paint(ctx, FAINT, lambda d: d.rectangle((cover.x, cover.y, cover.x + cover.w - 1, cover.y + cover.h - 1), outline=255, width=1))
+    _media_text(ctx, text, now)
+    for action, b in buttons:
+        _media_button(ctx, b, action, now)
 
 
 @widget("clock", "Clock", "The time, optionally with the date.", [

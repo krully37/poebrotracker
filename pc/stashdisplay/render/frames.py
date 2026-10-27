@@ -31,14 +31,26 @@ def hline(ctx: Ctx, x0: float, x1: float, y: float, color: str = FRAME_LINE, alp
     draw.paint(ctx, color, lambda d: d.line([(x0, y), (x1, y)], fill=255, width=1), alpha=alpha)
 
 
+def header_height(box: Box) -> int:
+    return 22 if box.h >= 90 else 18
+
+
+def content_box(box: Box, titled: bool) -> Box:
+    """The area inside a tooltip frame, with or without its header bar."""
+    if not titled:
+        return Box(box.x + 8, box.y + 6, box.w - 16, box.h - 12)
+    hh = header_height(box)
+    return Box(box.x + 8, box.y + hh + 6, box.w - 16, box.h - hh - 11)
+
+
 def tooltip(ctx: Ctx, box: Box, title: str = "") -> Box:
     """Draw a tooltip frame (with a header bar when there is a title). Returns the content area."""
     x0, y0, x1, y1 = box.x, box.y, box.x + box.w - 1, box.y + box.h - 1
     draw.paint(ctx, FRAME_FILL, lambda d: d.rectangle((x0, y0, x1, y1), fill=255), alpha=FILL_ALPHA)
     draw.paint(ctx, FRAME_LINE_DIM, lambda d: d.rectangle((x0, y0, x1, y1), outline=255, width=1))
     if not title:
-        return Box(box.x + 8, box.y + 6, box.w - 16, box.h - 12)
-    hh = 22 if box.h >= 90 else 18
+        return content_box(box, False)
+    hh = header_height(box)
     gradient_bar(ctx, Box(box.x + 1, box.y + 1, box.w - 2, hh))
     hline(ctx, x0, x1, y0, FRAME_LINE, alpha=160)
     hline(ctx, x0, x1, y0 + hh, FRAME_LINE)
@@ -47,7 +59,7 @@ def tooltip(ctx: Ctx, box: Box, title: str = "") -> Box:
     diamond(ctx, x1 - 6, cy, 3)
     tf = fit(title, TITLE_FAMILY, 400, box.w - 34, int(hh * 0.62), max_size=16)
     draw.text_in(ctx, Box(box.x + 14, box.y, box.w - 28, hh), draw.truncate(title, tf, box.w - 34), tf, TITLE, "center", "middle")
-    return Box(box.x + 8, box.y + hh + 6, box.w - 16, box.h - hh - 11)
+    return content_box(box, True)
 
 
 def page_header(ctx: Ctx, box: Box) -> None:

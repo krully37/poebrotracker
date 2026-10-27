@@ -1,10 +1,11 @@
 """Command line entry point.
 
-    stashdisplay run [--no-tray] [--offline] [--simulator]
+    stashdisplay run [--no-tray] [--offline] [--simulator] [--fake-media]
         Start the app: settings page on 127.0.0.1, the tray icon, and the link to the
         screen over USB. The settings page opens by itself on the first start. If a copy
         is already running, its settings page is opened instead. --simulator talks to a
-        simulated screen instead, shown at /simulator in the settings page.
+        simulated screen instead, shown at /simulator in the settings page. --fake-media
+        feeds the media card from a pretend player instead of Windows' media session.
 
     stashdisplay preview [--out DIR] [--scale N] [--seed N] [--offline]
         Render every page with demo data to PNG files (no screen, no WealthyExile needed).
@@ -126,6 +127,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         app.start_link()
     app.start_watcher()
+    app.start_player(fake=args.fake_media)
     if first_start:
         tray.open_settings(app)
     if args.no_tray:
@@ -148,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--no-tray", action="store_true", help="no tray icon; print the settings address and wait")
     r.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
     r.add_argument("--simulator", action="store_true", help="use a simulated screen instead of the USB one")
+    r.add_argument("--fake-media", action="store_true", help="a pretend media player for the media card (always on outside Windows)")
     r.set_defaults(func=cmd_run)
     p = sub.add_parser("preview", help="render all pages with demo data to PNG files")
     p.add_argument("--out", default="preview", help="output folder (default: ./preview)")

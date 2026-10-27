@@ -52,6 +52,7 @@ class RenderData:
     item_prices: dict[str, ItemPrice] = field(default_factory=dict)
     # Item name -> local icon file (AssetCache.icon). None renders without game icons.
     icon: Callable[[str], Path | None] | None = None
+    media: "NowPlaying | None" = None  # what the PC is playing, for the media card
 
     @property
     def stale(self) -> bool:

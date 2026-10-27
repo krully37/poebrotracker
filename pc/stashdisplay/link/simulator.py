@@ -196,7 +196,7 @@ class SimScreen:
             touch = self.touch
             if touch and not touch["moved"] and not touch["done"] and self.pages:
                 held = now - touch["t0"]
-                if touch["zone"] and held >= p.PRESS_DELAY + p.RING_FILL:
+                if _holds(touch["zone"]) and held >= p.PRESS_DELAY + p.RING_FILL:
                     touch["done"] = True
                     self._event({"type": "reset", "action": touch["zone"]["action"], "page": self._page_id()})
             if self.slide and now - self.slide[2] >= p.SLIDE_SECONDS:
@@ -244,7 +244,11 @@ class SimScreen:
                     self.slide = (old, self.current, now)
                     self._event({"type": "page", "page": self._page_id()})
             elif now - t["t0"] < p.PRESS_DELAY:
-                self._event({"type": "tap", "page": self._page_id()})
+                zone = t["zone"]
+                if zone and zone.get("gesture") == "tap":
+                    self._event({"type": "tap", "page": self._page_id(), "action": zone["action"]})
+                else:
+                    self._event({"type": "tap", "page": self._page_id()})
             # Held without a zone, or let go before the ring closed: nothing.
 
     def _zone_at(self, x: float, y: float) -> dict | None:
@@ -282,7 +286,7 @@ class SimScreen:
             renderer.dots(img, self.current, len(self.pages))
             if self.toast:
                 img.alpha_composite(self._overlay(self.toast[0]) or Image.new("RGBA", img.size))
-            if self.touch and self.touch["zone"] and not self.touch["moved"] and not self.touch["done"]:
+            if self.touch and _holds(self.touch["zone"]) and not self.touch["moved"] and not self.touch["done"]:
                 held = now - self.touch["t0"] - p.PRESS_DELAY
                 if held > 0:
                     _ring(img, self.touch["x0"], self.touch["y0"], min(1.0, held / p.RING_FILL))
@@ -340,6 +344,11 @@ class SimScreen:
 
 
 # --- Helpers ---------------------------------------------------------------------------------
+
+def _holds(zone: dict | None) -> bool:
+    """A long-press zone (the default), as opposed to a tap zone."""
+    return zone is not None and zone.get("gesture", "hold") == "hold"
+
 
 def _decode_frames(data: bytes) -> list[tuple[Image.Image, int]]:
     """Every frame of a JPEG or GIF file, with its duration in ms, sized for the screen."""

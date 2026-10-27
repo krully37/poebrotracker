@@ -16,9 +16,10 @@ A page is plain JSON so it can be saved in settings.json as is:
 import copy
 import uuid
 
+from .render import frames
 from .render.templates import TEMPLATES
 from .render.theme import BACKGROUND
-from .render.widgets import FRAMES, WIDGETS
+from .render.widgets import FRAMES, WIDGETS, media_layout, slot_title, under_label
 
 DEFAULT_HEADER = {"title": True, "clock": True, "synced": True}
 DEFAULT_BACKGROUND = {"kind": "color", "value": BACKGROUND, "fit": "cover", "x": 50, "y": 50}
@@ -83,11 +84,21 @@ RESETS = {("value", "session"): "reset_session", ("value", "rate"): "reset_rate"
 
 
 def touch_zones(page: dict) -> list[dict]:
-    """Areas of the page where a long press resets a value, for the screen."""
+    """Areas of the page the screen reacts to: a long press resets a value ("hold", the default),
+    a tap runs a media button ("gesture": "tap")."""
     zones = []
     for name, box in TEMPLATES[page["template"]].slots.items():
         slot = page["slots"].get(name)
         if not slot:
+            continue
+        if slot["widget"] == "media":
+            if slot["buttons"]:
+                # The same boxes the card draws its buttons in (renderer.overlay: frame, then title).
+                inner = box if slot["frame"] == "none" else frames.content_box(box, slot["frame"] == "tooltip" and bool(slot_title(slot)))
+                if slot["frame"] != "tooltip":
+                    inner = under_label(inner, slot["title"])
+                for action, b in media_layout(inner, slot["cover"])[2]:
+                    zones.append({"x": b.x, "y": b.y, "w": b.w, "h": b.h, "action": action, "gesture": "tap"})
             continue
         shown = slot.get("metric") if slot["widget"] == "value" else slot.get("series")
         action = RESETS.get((slot["widget"], shown))

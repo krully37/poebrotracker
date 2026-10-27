@@ -95,6 +95,20 @@ def test_long_note_is_cut_not_overflowing(demo):
     assert overlay.crop((0, DOTS_TOP, WIDTH, HEIGHT)).getextrema()[3] == (0, 0)
 
 
+def test_media_card_with_and_without_a_player(demo):
+    import dataclasses
+
+    from stashdisplay.nowplaying import FakePlayer, app_name
+
+    page = pagelib.normalize_page({"template": "full", "slots": {"main": {"widget": "media"}}})
+    idle = renderer.overlay(page, demo)
+    playing = renderer.overlay(page, dataclasses.replace(demo, media=FakePlayer().now()))
+    assert idle.tobytes() != playing.tobytes()  # cover, title and pause button show up
+    assert app_name("Spotify.exe") == "Spotify"
+    assert app_name("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic") == "ZuneMusic"
+    assert app_name("6F940AC27A98DD61") == ""
+
+
 def test_placeholders(demo):
     text = fill_placeholders("{league} {rate} {unknown}", demo)
     assert text.startswith("Demo ")

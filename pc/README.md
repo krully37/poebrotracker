@@ -28,6 +28,8 @@ This starts the settings page on `127.0.0.1` a tray icon, and the link to the sc
 
 The app then talks to a simulated screen instead of the USB one, over the real protocol ([docs/PROTOCOL.md](../docs/PROTOCOL.md)). Open the **Simulator** tab in the settings page: it shows the screen exactly as the firmware will composite it. Click to tap, drag sideways to change page, and hold on a session or div/h value to reset it. The page also has buttons to unplug the cable and power-cycle the screen, and to write fake level-up, death and party-member lines to a test `Client.txt` (`Client-sim.txt` in the app folder), which the app follows like the game's own log.
 
+The **Now playing** card follows Windows' media session (Spotify, browsers, most players), and its buttons control it. On the Mac, or with `--fake-media` on Windows, a pretend player with three tracks stands in.
+
 The settings, pages, uploaded backgrounds and log live in `%APPDATA%\stashdisplay` on Windows and `~/Library/Application Support/stashdisplay` on macOS. Set `STASHDISPLAY_HOME` to use another folder, for example a throwaway one while testing.
 
 The page is only reachable from this PC. It needs the per-install token, which the tray link carries once and a cookie keeps afterwards, so other websites open in the browser cannot read or change it.
@@ -64,6 +66,7 @@ The first run downloads the game icons and the Fontin font into the local cache 
 | `vault.py` | Cookie encryption (Windows DPAPI; base64 + owner-only file elsewhere) |
 | `media.py` | Uploaded backgrounds: images, GIFs, videos and their still frames |
 | `gamelog.py` | Follows the game's `Client.txt`: level-ups and deaths, which characters are the friend's |
+| `nowplaying.py` | What the PC plays (Windows media session, or a fake player) and the media buttons |
 | `app.py` | The running app shared by the settings page and the tray |
 | `web/` | Settings page: Flask API (`server.py`) and the Alpine.js editor (`static/`) |
 | `tray.py` | Tray icon and menu |
