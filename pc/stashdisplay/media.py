@@ -108,6 +108,15 @@ class MediaStore:
         if folder.exists():
             shutil.rmtree(folder)
 
+    def source_path(self, media_id: str) -> Path | None:
+        """The uploaded file itself (PNG for images, GIF, or the original video)."""
+        try:
+            meta = self.get(media_id)
+        except MediaError:
+            return None
+        path = self._dir(media_id) / f"source{meta['ext']}"
+        return path if path.exists() else None
+
     def still_path(self, media_id: str) -> Path | None:
         try:
             path = self._dir(media_id) / "still.png"

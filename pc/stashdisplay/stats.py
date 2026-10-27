@@ -13,13 +13,14 @@ MAX_GAP = 20 * 60
 Points = list[tuple[float, float]]
 
 
-def rate_per_hour(points: Points, now: float, window: float = 3600, min_span: float = 900) -> float | None:
-    """Least-squares slope of the total over the last `window` seconds, in divines/hour.
+def rate_per_hour(points: Points, now: float, window: float = 3600, min_span: float = 900,
+                  since: float = 0.0) -> float | None:
+    """Least-squares slope of the total over the last `window` seconds (and after `since`), in divines/hour.
 
     Returns None until there are at least 3 points spanning `min_span` seconds,
-    so a fresh start does not show a wild number.
+    so a fresh start or a reset does not show a wild number.
     """
-    recent = [(t, v) for t, v in points if t >= now - window]
+    recent = [(t, v) for t, v in points if t >= max(now - window, since)]
     if len(recent) < 3 or recent[-1][0] - recent[0][0] < min_span:
         return None
     n = len(recent)

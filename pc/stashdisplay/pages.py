@@ -77,6 +77,25 @@ def visible(pages: list[dict]) -> list[dict]:
     return [p for p in pages if not p["hidden"]]
 
 
+# What a long press resets, by what a slot shows. Anything else is not resettable.
+RESETS = {("value", "session"): "reset_session", ("value", "rate"): "reset_rate",
+          ("sparkline", "session"): "reset_session"}
+
+
+def touch_zones(page: dict) -> list[dict]:
+    """Areas of the page where a long press resets a value, for the screen."""
+    zones = []
+    for name, box in TEMPLATES[page["template"]].slots.items():
+        slot = page["slots"].get(name)
+        if not slot:
+            continue
+        shown = slot.get("metric") if slot["widget"] == "value" else slot.get("series")
+        action = RESETS.get((slot["widget"], shown))
+        if action:
+            zones.append({"x": box.x, "y": box.y, "w": box.w, "h": box.h, "action": action})
+    return zones
+
+
 def preset() -> list[dict]:
     """The pages a fresh install starts with: the brief's three pages plus one example custom page."""
     pages = [

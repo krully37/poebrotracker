@@ -199,5 +199,10 @@
   "set.web_port": "Port de la page de réglages",
   "set.web_port.hint": "Ne changez le port de la page de réglages que si un autre programme l'utilise.",
   "set.autostart": "Démarrer avec Windows",
-  "set.autostart.unsupported": "Le démarrage avec Windows n'est disponible que sous Windows."
+  "set.autostart.unsupported": "Le démarrage avec Windows n'est disponible que sous Windows.",
+  "tab.simulator": "Simulateur",
+  "screen.connected": "Écran connecté",
+  "screen.syncing": "Envoi à l'écran…",
+  "screen.searching": "Écran introuvable",
+  "screen.off": "Liaison écran coupée"
 }

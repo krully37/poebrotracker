@@ -1,9 +1,10 @@
 """Command line entry point.
 
-    stashdisplay run [--no-tray] [--offline]
-        Start the app: settings page on 127.0.0.1 and the tray icon. The settings page
-        opens by itself on the first start. If a copy is already running, its settings
-        page is opened instead.
+    stashdisplay run [--no-tray] [--offline] [--simulator]
+        Start the app: settings page on 127.0.0.1, the tray icon, and the link to the
+        screen over USB. The settings page opens by itself on the first start. If a copy
+        is already running, its settings page is opened instead. --simulator talks to a
+        simulated screen instead, shown at /simulator in the settings page.
 
     stashdisplay preview [--out DIR] [--scale N] [--seed N] [--offline]
         Render every page with demo data to PNG files (no screen, no WealthyExile needed).
@@ -25,11 +26,12 @@ from .history import History
 from .render import data as renderdata
 from .render import fonts, renderer
 from .render.data import ItemPrice
+from .sources.base import Snapshot
 from .sources.demo import DemoSource
 
 
-def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | None = None) -> renderdata.RenderData:
-    """About 6 hours of fake history, a session that started 2 hours ago, and fake poe.ninja prices."""
+def demo_history(now: float, seed: int | None = None) -> tuple[History, DemoSource, Snapshot]:
+    """About 6 hours of fake history, a session that started 2 hours ago, and the last snapshot."""
     source = DemoSource(seed=seed)
     source.sim_time = now
     history = History(path=None)
@@ -40,13 +42,23 @@ def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | N
     history.start_session(now - 2 * 3600 - 5 * 60)
     # Pretend the league started 9 days ago with a much smaller stash.
     history.league_starts[last.league] = (now - 9 * 86400, round(last.total * 0.22, 1))
-    prices = {
-        "Mirror of Kalandra": ItemPrice(chaos=round(last.div_price * 1180), div=1180.0, change=-3.0),
-        "Mageblood": ItemPrice(chaos=round(last.div_price * 182), div=182.0, change=7.5),
-        "Headhunter": ItemPrice(chaos=round(last.div_price * 34.5), div=34.5, change=-12.0),
+    return history, source, last
+
+
+def demo_prices(div_price: float) -> dict[str, ItemPrice]:
+    """Fake poe.ninja prices."""
+    return {
+        "Mirror of Kalandra": ItemPrice(chaos=round(div_price * 1180), div=1180.0, change=-3.0),
+        "Mageblood": ItemPrice(chaos=round(div_price * 182), div=182.0, change=7.5),
+        "Headhunter": ItemPrice(chaos=round(div_price * 34.5), div=34.5, change=-12.0),
     }
+
+
+def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | None = None) -> renderdata.RenderData:
+    history, _, last = demo_history(now, seed)
     return renderdata.build(
-        history, last, now=now, synced_at=now - 130, item_prices=prices, icon=assets.icon if assets else None
+        history, last, now=now, synced_at=now - 130, item_prices=demo_prices(last.div_price),
+        icon=assets.icon if assets else None,
     )
 
 
@@ -99,6 +111,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         tray.open_settings(app)
         return 0
     logging.info("settings page on %s", server.url(app).split("?")[0])
+    if args.simulator:
+        from .link.simulator import SimRunner, SimScreen
+        from .link.transport import LoopbackPair
+
+        pair = LoopbackPair()
+        app.simulator = (SimScreen(pair.screen), pair)
+        SimRunner(app.simulator[0]).start()
+        app.start_link(lambda: [pair.pc] if pair.plugged else [])
+        print(f"Simulated screen: {server.url(app).split('?')[0]}simulator")
+    else:
+        app.start_link()
     if first_start:
         tray.open_settings(app)
     if args.no_tray:
@@ -120,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="start the app (settings page and tray icon)")
     r.add_argument("--no-tray", action="store_true", help="no tray icon; print the settings address and wait")
     r.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
+    r.add_argument("--simulator", action="store_true", help="use a simulated screen instead of the USB one")
     r.set_defaults(func=cmd_run)
     p = sub.add_parser("preview", help="render all pages with demo data to PNG files")
     p.add_argument("--out", default="preview", help="output folder (default: ./preview)")

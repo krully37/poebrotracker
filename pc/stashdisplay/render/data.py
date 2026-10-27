@@ -86,7 +86,7 @@ def build(
     midnight = stats.local_midnight(now)
     metrics = {
         "total": total,
-        "rate": stats.rate_per_hour(pts, now, rate_window),
+        "rate": stats.rate_per_hour(pts, now, rate_window, since=history.rate_start),
         "session": stats.gain_since(pts, history.session_start),
         "today": stats.gain_since(pts, midnight),
         "best_hour": stats.best_hour(pts, midnight),

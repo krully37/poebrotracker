@@ -124,6 +124,28 @@ def preview(page: dict, data: RenderData, index: int, count: int,
     return img.convert("RGB")
 
 
+def toast(text: str) -> Image.Image:
+    """A short message over the page ("Too soon", "Session reset"), as a full-screen overlay."""
+    ctx = Ctx(Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0)), None)  # type: ignore[arg-type]
+    f = font(TITLE_FAMILY, 20, 400)
+    w = text_size(text, f)[0] + 48
+    box = Box(int((WIDTH - w) / 2), HEIGHT - 96, int(w), 44)
+    draw.paint(ctx, "#0A0806", lambda d: d.rectangle((box.x, box.y, box.x + box.w, box.y + box.h), fill=255), alpha=235)
+    frames.tooltip(ctx, box)
+    draw.text_in(ctx, box, text, f, TITLE, "center")
+    return ctx.img
+
+
+def offline_screen(message: str) -> Image.Image:
+    """The screen the firmware shows on its own when the PC is away (baked into the firmware)."""
+    ctx = Ctx(Image.new("RGBA", (WIDTH, HEIGHT), BACKGROUND), None)  # type: ignore[arg-type]
+    box = Box(90, 110, WIDTH - 180, 100)
+    frames.tooltip(ctx, box)
+    draw.text_in(ctx, Box(box.x, box.y + 18, box.w, 40), message, font(TITLE_FAMILY, 24, 400), TITLE, "center")
+    draw.text_in(ctx, Box(box.x, box.y + 58, box.w, 24), "Stash Display", font(NAME_FAMILY, 14, 400), MUTED, "center")
+    return ctx.img.convert("RGB")
+
+
 def contact_sheet(images: list[Image.Image], labels: list[str], columns: int = 2, scale: int = 1) -> Image.Image:
     """All page previews on one image, with a label under each, for quick review."""
     pad, label_h = 16, 22

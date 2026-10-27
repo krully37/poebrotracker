@@ -13,6 +13,7 @@ class History:
     path: Path | None = None  # None = in memory only (demo mode)
     points: list[tuple[float, float]] = field(default_factory=list)  # (unix time, total in div)
     session_start: float = 0.0
+    rate_start: float = 0.0  # div/h only counts points after this (long press on the screen resets it)
     # First point seen in each league: {league: (time, total)}
     league_starts: dict[str, tuple[float, float]] = field(default_factory=dict)
 
@@ -25,6 +26,7 @@ class History:
             path=path,
             points=[(float(t), float(v)) for t, v in data.get("points", [])],
             session_start=float(data.get("session_start", 0)),
+            rate_start=float(data.get("rate_start", 0)),
             league_starts={k: (float(t), float(v)) for k, (t, v) in data.get("league_starts", {}).items()},
         )
 
@@ -34,6 +36,7 @@ class History:
         data = {
             "points": self.points,
             "session_start": self.session_start,
+            "rate_start": self.rate_start,
             "league_starts": self.league_starts,
         }
         # Write then rename, so a crash or power cut never leaves a half-written file.

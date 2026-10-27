@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stash Display · Simulator</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .sim { display: flex; gap: 20px; padding: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .sim .screen { width: 960px; max-width: 100%; cursor: pointer; user-select: none; touch-action: none; }
+  .sim .screen img { image-rendering: auto; }
+  .sim .panel { width: 300px; }
+  .sim dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 14px; font-size: 14px; }
+  .sim dt { color: var(--muted); }
+  .sim dd { margin: 0; }
+  .sim .btn { display: block; width: 100%; margin-bottom: 8px; }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">Stash Display</div>
+    <nav class="tabs"><a href="/"><button>Settings</button></a><button class="active">Simulator</button></nav>
+  </header>
+  <main class="sim">
+    <div class="screen" id="screen"><img id="frame" src="/api/sim/stream" alt="" draggable="false"></div>
+    <section class="panel">
+      <h2>Simulated screen</h2>
+      <p class="hint">What the real screen will show, composited the same way. Click to tap, drag sideways to change page, hold on a session or div/h value to reset it.</p>
+      <dl>
+        <dt>Link</dt><dd id="link">…</dd>
+        <dt>Screen</dt><dd id="online">…</dd>
+        <dt>Page</dt><dd id="page">…</dd>
+        <dt>Storage</dt><dd id="flash">…</dd>
+        <dt>Last sync</dt><dd id="sync">…</dd>
+      </dl>
+      <button class="btn" id="cable">Unplug the cable</button>
+      <button class="btn" id="power">Power cycle</button>
+      <p class="hint">Unplugged, the screen switches to "PC disconnected" and dims after 90 s, like the real one. A power cycle loses the pages kept in memory but keeps the stored backgrounds.</p>
+    </section>
+  </main>
+</div>
+<script>
+  const WRITE = { "X-Stashdisplay": "1", "Content-Type": "application/json" };
+  const screenEl = document.getElementById("screen");
+  let queue = Promise.resolve();  // touch events must reach the screen in order
+  let down = false, lastMove = 0, plugged = true;
+
+  function post(path, body) {
+    return fetch(path, { method: "POST", headers: WRITE, credentials: "same-origin", body: JSON.stringify(body || {}) })
+      .then((r) => r.json());
+  }
+
+  function touch(kind, e) {
+    const rect = screenEl.getBoundingClientRect();
+    const x = Math.max(0, Math.min(479, (e.clientX - rect.left) * 480 / rect.width));
+    const y = Math.max(0, Math.min(319, (e.clientY - rect.top) * 320 / rect.height));
+    queue = queue.then(() => post("/api/sim/touch", { kind, x, y })).catch(() => {});
+  }
+
+  screenEl.addEventListener("pointerdown", (e) => { down = true; screenEl.setPointerCapture(e.pointerId); touch("down", e); });
+  screenEl.addEventListener("pointermove", (e) => {
+    if (!down || performance.now() - lastMove < 30) return;
+    lastMove = performance.now();
+    touch("move", e);
+  });
+  screenEl.addEventListener("pointerup", (e) => { if (down) { down = false; touch("up", e); } });
+  screenEl.addEventListener("pointercancel", (e) => { if (down) { down = false; touch("up", e); } });
+
+  document.getElementById("cable").onclick = async () => { show(await post("/api/sim/cable", { plugged: !plugged })); };
+  document.getElementById("power").onclick = async () => { show(await post("/api/sim/power")); };
+
+  function show(s) {
+    const sim = s.sim || {};
+    plugged = sim.plugged !== false;
+    const linkText = { connected: "connected", syncing: "sending…", searching: "looking for the screen", off: "off" };
+    document.getElementById("link").textContent = linkText[s.state] || s.state;
+    document.getElementById("link").className = s.state === "searching" ? "warn" : "ok";
+    document.getElementById("online").textContent = !plugged ? "cable unplugged" : sim.online ? "receiving" : "waiting for the PC";
+    document.getElementById("page").textContent = sim.pages ? `${sim.page} (${sim.pages} pages)` : "none yet";
+    const mb = (n) => (n / 1048576).toFixed(1);
+    document.getElementById("flash").textContent = `${mb(sim.flash_used || 0)} / ${mb(sim.flash_total || 0)} MB, ${sim.files || 0} files`;
+    document.getElementById("sync").textContent = s.last_sync ? new Date(s.last_sync * 1000).toLocaleTimeString() : "never";
+    if (s.error) document.getElementById("sync").textContent += ` · ${s.error}`;
+    document.getElementById("cable").textContent = plugged ? "Unplug the cable" : "Plug the cable back in";
+  }
+
+  async function poll() {
+    try { show(await fetch("/api/screen", { credentials: "same-origin" }).then((r) => r.json())); } catch (e) {}
+  }
+  poll();
+  setInterval(poll, 1000);
+</script>
+</body>
+</html>

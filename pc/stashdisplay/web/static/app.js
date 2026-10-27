@@ -7,6 +7,7 @@ const WRITE_HEADERS = { "X-Stashdisplay": "1" };
 const HISTORY_LIMIT = 100;
 const PREVIEW_DEBOUNCE_MS = 60;
 const PREVIEW_REFRESH_MS = 30000;
+const SCREEN_POLL_MS = 3000;
 
 async function api(path, { method = "GET", json, body, headers = {} } = {}) {
   const opts = { method, headers: { ...headers }, credentials: "same-origin" };
@@ -52,6 +53,7 @@ document.addEventListener("alpine:init", () => {
     cookieInput: "",
     cookieStatus: { kind: "", text: "" },
     autostart: { supported: false, enabled: false },
+    screen: { state: "off", simulator: false },
     saving: false,
     addOpen: false,
     dragFrom: null,
@@ -81,6 +83,7 @@ document.addEventListener("alpine:init", () => {
       this.$watch("pageIndex", () => this.schedulePreview());
       this.$watch("forceDemo", () => this.schedulePreview());
       setInterval(() => this.schedulePreview(), PREVIEW_REFRESH_MS);  // clock and "synced" text
+      setInterval(() => this.pollScreen(), SCREEN_POLL_MS);
       window.addEventListener("beforeunload", (e) => { if (this.dirty) e.preventDefault(); });
       this.schedulePreview();
     },
@@ -95,6 +98,7 @@ document.addEventListener("alpine:init", () => {
       this.hasCookie = state.has_cookie;
       this.autostart = state.autostart;
       this.isDemo = !state.live;
+      this.screen = state.screen;
       this.pageIndex = Math.min(this.pageIndex, this.draft.pages.length - 1);
     },
 
@@ -471,6 +475,12 @@ document.addEventListener("alpine:init", () => {
     async setAutostart(enabled) {
       const r = await api("/api/autostart", { method: "POST", json: { enabled } }).then((x) => x.json());
       if (!r.error) this.autostart = r;
+    },
+
+    async pollScreen() {
+      try {
+        this.screen = await api("/api/screen").then((r) => r.json());
+      } catch (e) { /* the app is gone; the next save says so */ }
     },
 
     notify(text) {

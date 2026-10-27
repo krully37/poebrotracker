@@ -23,8 +23,11 @@
     <nav class="tabs">
       <button :class="{active: tab === 'pages'}" @click="tab = 'pages'" x-text="t('tab.pages')"></button>
       <button :class="{active: tab === 'settings'}" @click="tab = 'settings'" x-text="t('tab.settings')"></button>
+      <template x-if="screen.simulator"><a href="/simulator"><button x-text="t('tab.simulator')"></button></a></template>
     </nav>
     <div class="spacer"></div>
+    <span class="badge" :class="screen.state === 'searching' || screen.state === 'off' ? 'demo' : 'live'"
+          :title="screen.error || ''" x-text="t('screen.' + screen.state)"></span>
     <label class="toggle" :title="t('demo.hint')">
       <input type="checkbox" x-model="forceDemo">
       <span x-text="t('demo.force')"></span>

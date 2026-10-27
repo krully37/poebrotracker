@@ -18,7 +18,15 @@ On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\python` instead.
 .venv/bin/python -m stashdisplay run
 ```
 
-This starts the settings page on `127.0.0.1` and a tray icon (click it, or right-click → Open settings). The settings page opens by itself on the first start. Starting a second copy only opens the settings of the running one. Add `--no-tray` to print the settings address in the terminal instead, and `--offline` to skip downloads.
+This starts the settings page on `127.0.0.1` a tray icon, and the link to the screen over USB (found automatically) (click it, or right-click → Open settings). The settings page opens by itself on the first start. Starting a second copy only opens the settings of the running one. Add `--no-tray` to print the settings address in the terminal instead, and `--offline` to skip downloads.
+
+### Without the screen: the simulator
+
+```bash
+.venv/bin/python -m stashdisplay run --no-tray --simulator
+```
+
+The app then talks to a simulated screen instead of the USB one, over the real protocol ([docs/PROTOCOL.md](../docs/PROTOCOL.md)). Open the **Simulator** tab in the settings page: it shows the screen exactly as the firmware will composite it. Click to tap, drag sideways to change page, and hold on a session or div/h value to reset it. The page also has buttons to unplug the cable and power-cycle the screen.
 
 The settings, pages, uploaded backgrounds and log live in `%APPDATA%\stashdisplay` on Windows and `~/Library/Application Support/stashdisplay` on macOS. Set `STASHDISPLAY_HOME` to use another folder, for example a throwaway one while testing.
 
@@ -59,3 +67,8 @@ The first run downloads the game icons and the Fontin font into the local cache 
 | `web/` | Settings page: Flask API (`server.py`) and the Alpine.js editor (`static/`) |
 | `tray.py` | Tray icon and menu |
 | `autostart.py` | "Start with Windows" (registry Run key) |
+| `link/protocol.py` | Serial framing, message types, overlay format, timings |
+| `link/client.py` | PC end of the link: finds the screen, syncs pages and files, handles touch events |
+| `link/content.py` | What the screen should hold: overlays, backgrounds as JPEG/GIF, reset zones |
+| `link/simulator.py` | Simulated screen (what the firmware will do) |
+| `link/transport.py` | Serial port detection, and the in-process cable used by the simulator |

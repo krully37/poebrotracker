@@ -40,7 +40,7 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
 - Landscape 480×320, rotated in software (the panel has no hardware rotation). Full-frame pushes only.
 - **Swipe left/right**: change page, with a slide animation.
 - **Tap**: ask the PC for a refresh. The PC refuses if the last fetch was under 60 s ago, and the screen shows "too soon".
-- **Long press** on the Session page: reset the session.
+- **Long press** on a value that can be reset: a ring is drawn around the finger and fills in about 1.5 s; lifting early cancels. When it closes, that value resets. Resettable values: **session** (gain, chart) and **div/h** (the rate starts counting again from that moment). League start, today and best hour cannot be reset, so a long press there does nothing. The PC tells the screen which areas of each page are resettable.
 - **Pagination dots**, drawn by the screen. They switch to a "4/9" counter when there are many pages.
 - **Boot animation**: at power-on the screen plays a GIF from its own flash once (no PC needed), then shows the pages, or the offline screen if the PC is not there yet. A default animation ships out of the box; the friend can replace it in the settings page (same upload and conversion as backgrounds).
 - **PC disconnected** after 90 s with no message, and the backlight dims. Full brightness returns on reconnect.
@@ -133,6 +133,7 @@ Decided 2026-10-27.
 - **Divine price**: worked out from WealthyExile if it gives totals in both chaos and divines, else the friends' pricer (later), else poe.ninja.
 - **poe.ninja**: official economy endpoints, used for the item-price widget and the divine price fallback. It sends a descriptive User-Agent, respects the cache and ETags, and polls at most every 30 min. Note: poe.ninja's docs ask desktop apps to proxy through their own backend. We accept that small deviation at this request rate.
 - **History**: a local file in `%APPDATA%\stashdisplay`, which survives restarts. It feeds div/h, the sparkline, session, league-start and day stats.
+- **XP/hour** (wanted, not scheduled yet): `Client.txt` only logs level-ups, not experience. GGG's official API returns each character's `experience` (`GET /character`, scope `account:characters`), and desktop apps may use it as a "public client" (OAuth with PKCE and a local redirect). This needs the app registered with GGG, and the friend logging in to his PoE account once to approve it. To be decided before step 7.
 
 ## 7. Delivery
 
@@ -159,13 +160,14 @@ Decided 2026-10-27.
 - Exact `Client.txt` line formats for level-up and death, and whether party members' events appear (checked against the friend's real log file).
 - Real frame rate for slides, GIF and video (measured as soon as the hardware arrives).
 - USB on the board: native USB or CH340 (matters for the Windows driver and for how fast data can be sent).
+- XP/hour: register an app with GGG's developer program (see §6), and whether that registration is approved.
 
 ## 10. Build order
 
 1. Repo, CI skeleton, this scope.
 2. PC: history, stats and the page renderer in **demo mode**, producing PNG previews on the Mac (no hardware needed).
 3. Settings page with live preview and page editor.
-4. Serial protocol (overlay transfer, touch events, heartbeat), tested against a simulated screen on the PC.
+4. Serial protocol (overlay transfer, file transfer to the screen's flash, touch events, heartbeat), tested against a simulated screen on the PC. The simulator is also a page in the settings app: the screen exactly as the firmware will composite it, driven with the mouse. The protocol is specified in `docs/PROTOCOL.md`.
 4b. `Client.txt` event watcher (level-up, death), tested against sample log lines, then a real log.
 5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates.
 6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds, and the boot animation.

@@ -9,8 +9,10 @@ Protection against other websites open in the same browser:
 """
 
 import hmac
+import io
 import logging
 import threading
+import time
 from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, redirect, request, send_file
@@ -31,6 +33,7 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).with_name("static")
 COOKIE = "sd_token"
 WRITE_HEADER = "X-Stashdisplay"
+SIM_FPS = 20
 PLACEHOLDERS = ["total", "rate", "session", "today", "best_hour", "league_gain", "div_price",
                 "league", "time", "date", "session_since", "session_duration", "synced"]
 
@@ -116,6 +119,7 @@ def create_app(app: App) -> Flask:
             "status": app.status,
             "live": app.live_data is not None,
             "autostart": {"supported": autostart.supported(), "enabled": autostart.enabled()},
+            "screen": screen_status(),
         }
 
     @web.get("/api/state")
@@ -227,6 +231,67 @@ def create_app(app: App) -> Flask:
             return jsonify({"error": str(e)}), 400
         return jsonify({"media": app.media.list()})
 
+    # --- Screen and simulator ----------------------------------------------------------
+
+    def screen_status() -> dict:
+        link = app.link
+        out = {"state": link.state if link else "off", **(link.info if link else {}),
+               "simulator": app.simulator is not None}
+        if app.simulator:
+            sim, pair = app.simulator
+            out["sim"] = {**sim.status(), "plugged": pair.plugged}
+        return out
+
+    @web.get("/api/screen")
+    def get_screen():
+        return jsonify(screen_status())
+
+    def simulator():
+        if app.simulator is None:
+            abort(404)
+        return app.simulator
+
+    @web.get("/simulator")
+    def simulator_page():
+        simulator()
+        return send_file(STATIC / "simulator.html")
+
+    @web.get("/api/sim/stream")
+    def sim_stream():
+        sim, _ = simulator()
+
+        def frames():
+            while True:
+                buf = io.BytesIO()
+                sim.frame().save(buf, "JPEG", quality=90)
+                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.getvalue() + b"\r\n"
+                time.sleep(1 / SIM_FPS)
+
+        return Response(frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+    @web.post("/api/sim/touch")
+    def sim_touch():
+        sim, _ = simulator()
+        body = request.get_json(force=True) or {}
+        x, y = float(body.get("x", 0)), float(body.get("y", 0))
+        {"down": sim.touch_down, "move": sim.touch_move, "up": sim.touch_up}[body.get("kind", "up")](x, y)
+        return jsonify({"ok": True})
+
+    @web.post("/api/sim/cable")
+    def sim_cable():
+        _, pair = simulator()
+        if (request.get_json(force=True) or {}).get("plugged"):
+            pair.plug()
+        else:
+            pair.unplug()
+        return jsonify(screen_status())
+
+    @web.post("/api/sim/power")
+    def sim_power():
+        sim, _ = simulator()
+        sim.power_cycle()
+        return jsonify(screen_status())
+
     # --- Windows autostart ----------------------------------------------------------
 
     @web.post("/api/autostart")
@@ -251,6 +316,6 @@ def serve_in_background(app: App):
     """
     from waitress import create_server
 
-    server = create_server(create_app(app), host="127.0.0.1", port=app.store.settings["web"]["port"], threads=4)
+    server = create_server(create_app(app), host="127.0.0.1", port=app.store.settings["web"]["port"], threads=8)
     threading.Thread(target=server.run, daemon=True, name="settings-page").start()
     return server

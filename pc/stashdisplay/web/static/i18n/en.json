@@ -123,5 +123,10 @@
   "set.web_port": "Settings page port",
   "set.web_port.hint": "Change the settings page port only if another program uses it.",
   "set.autostart": "Start with Windows",
-  "set.autostart.unsupported": "Start with Windows is only available on Windows."
+  "set.autostart.unsupported": "Start with Windows is only available on Windows.",
+  "tab.simulator": "Simulator",
+  "screen.connected": "Screen connected",
+  "screen.syncing": "Sending to the screen…",
+  "screen.searching": "Screen not found",
+  "screen.off": "Screen link off"
 }

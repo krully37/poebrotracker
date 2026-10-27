@@ -161,3 +161,4 @@ label.inline > span, .checks label > span { display: inline; margin: 0; font-siz
   .pages-tab { grid-template-columns: 1fr; }
   .slot-editor { position: static; max-height: none; }
 }
+.tabs a { text-decoration: none; }
