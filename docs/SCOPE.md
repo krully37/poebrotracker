@@ -161,7 +161,8 @@ Decided 2026-10-27.
 
 - Exact WealthyExile responses: do they include items, tabs, a chaos and divine total, league-start history? (Settled during reverse-engineering.)
 - What the friends' pricer is and how it exposes prices (local app? file? HTTP?).
-- `Client.txt` line formats: taken from community log tools (English client), not yet checked against the friend's real log file, nor whether party members' level-ups and deaths appear there.
+- `Client.txt` line formats: **checked on 2026-10-27 against a real English-client log** (the owner's, Steam install, March to August 2026, 166k lines). All 333 level-up lines and every "has been slain." system line match; chat lines with "died" or "slain" are ignored. Party members' level-ups and deaths **do** appear there; all of the ~20 other players in that log were also seen joining or leaving the area, so none was learned as an own character (zero false animations). Non-Latin names (Chinese, Korean, Cyrillic) parse fine. Still open: the friend's client language. A French client writes French lines, which the current patterns do not match.
+- Windows checks on 2026-10-27 (no screen): tests pass on Python 3.13; `Client.txt` was found through Steam's registry key and `libraryfolders.vdf` on another drive; the simulator and the fake log events work; the DPAPI vault round-trips. Real USB is still untested.
 - Real frame rate for slides, GIF and video (measured as soon as the hardware arrives).
 - USB on the board: native USB or CH340 (matters for the Windows driver and for how fast data can be sent).
 - XP/hour: register an app with GGG's developer program (see §6), and whether that registration is approved.

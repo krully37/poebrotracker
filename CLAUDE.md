@@ -7,7 +7,7 @@ A USB-wired 3.5" desk screen (Guition JC3248W535, ESP32-S3) that shows a Path of
 - `pc/`: the Python app (renderer, settings page, screen link, simulator). Setup and run commands are in `pc/README.md`.
 - `firmware/`: the screen side (step 6, not started).
 
-Status on 2026-10-27: steps 1–4 are done. Next is step 4b, the `Client.txt` watcher. `git log` shows anything newer.
+Status on 2026-10-27: steps 1–4b are done, and the `Client.txt` watcher is checked against a real English-client log on Windows (`docs/SCOPE.md` §9). Next is step 5, once the screen arrives. `git log` shows anything newer.
 
 ## How to work here
 
