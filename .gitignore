@@ -1,0 +1,23 @@
+# Secrets and local data: never commit
+settings.json
+*.cookie
+dumps/
+history.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+*.spec
+.pytest_cache/
+
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
