@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Feeds a USB desk display with the stash value computed by WealthyExile (Path of Exile 1)."
 requires-python = ">=3.12"
 dependencies = [
+    "pillow>=11",
     "pyserial>=3.5",
     "requests>=2.31",
 ]
@@ -20,6 +21,9 @@ stashdisplay = "stashdisplay.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["stashdisplay*"]
+
+[tool.setuptools.package-data]
+stashdisplay = ["assets/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

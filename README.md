@@ -6,6 +6,9 @@ A 3.5" USB touchscreen that sits next to the keyboard and shows the value of a P
 
 - [docs/SCOPE.md](docs/SCOPE.md): what we're building and the decisions made (start here)
 - [docs/BRIEF.md](docs/BRIEF.md): the original brief
+- [pc/README.md](pc/README.md): run the PC app and its previews
+
+![Preset pages rendered with demo data](docs/img/preview-demo.png)
 
 ## Layout
 

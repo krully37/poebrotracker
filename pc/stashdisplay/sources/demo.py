@@ -42,18 +42,16 @@ class DemoSource:
     def fetch(self) -> Snapshot:
         self.sim_time += self.step
         rng = self.rng
-        # About +4 div/h on average, with noise and the odd big drop.
+        # Roughly +4 to +6 div/h on average, with noise, the odd big drop and the odd purchase.
         for name, _, base_q, unit in _STOCK:
-            if unit >= 1:
-                if rng.random() < 0.03:
-                    self.qty[name] += 1
-            else:
-                drift = max(0, round(rng.gauss(base_q * 0.004, base_q * 0.006)))
-                self.qty[name] += drift
+            if unit < 1:
+                self.qty[name] += max(0, round(rng.gauss(base_q * 0.001, base_q * 0.002)))
+        if rng.random() < 0.25:
+            self.qty["Divine Orb"] += 1
+        if rng.random() < 0.015:
+            self.qty["Divine Orb"] += rng.randint(3, 8)
         if rng.random() < 0.02:
-            self.qty["Divine Orb"] += rng.randint(3, 12)
-        if rng.random() < 0.03:
-            self.qty["Divine Orb"] = max(0, self.qty["Divine Orb"] - rng.randint(2, 8))
+            self.qty["Divine Orb"] = max(0, self.qty["Divine Orb"] - rng.randint(2, 6))
 
         items = [
             Item(name, self.qty[name], round(self.qty[name] * unit * rng.uniform(0.98, 1.02), 3), tab)
