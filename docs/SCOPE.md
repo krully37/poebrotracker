@@ -13,6 +13,7 @@ Items marked **[PROPOSED]** are technical choices made by Claude and still open 
 | Backgrounds | Black | Per-page background: **still image, GIF or video** |
 | Disconnected | After 10–15 min of silence | 30 s heartbeat; **"PC disconnected" after ~90 s**, and the screen **dims** |
 | Divine price | WealthyExile, else poe.ninja | Pluggable sources, in order: worked out from WealthyExile → the friends' own pricer (later) → poe.ninja |
+| Game events | Not in the brief | **Level-up and death animations**, triggered by reading the game's `Client.txt` log (see §5b) |
 
 The brief's non-negotiable constraints are unchanged. Nothing touches the game, and the cookie stays on the PC (the screen only ever receives images). WealthyExile is polled about every 5 minutes, and no personal cloud service is used.
 
@@ -22,6 +23,7 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
                       PC (Windows .exe, runs in background)                     Screen (ESP32-S3)
  WealthyExile --HTTPS+cookie--> fetch (every 5 min)                             flash: backgrounds (img/GIF/MJPEG)
  poe.ninja (≤ every 30 min) --> price sources                                    PSRAM: compressed page overlays
+ Client.txt (tail, read-only) -> event watcher ──"play anim"──USB──────────────> full-screen event animations
                                 history + stats (div/h, session, league...)      compositor: overlay over bg frame
                                 page renderer (Pillow) ──overlays──USB──────────> slide animation on swipe
  browser <── localhost ──────── settings page + exact preview (same renderer)    touch: swipe / tap / long press
@@ -75,6 +77,18 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 - Stored in the screen's flash (a ~10–12 MB filesystem partition, out of 16 MB). The settings page shows how much space is used and refuses uploads that don't fit. That's roughly 20–40 s of 480×320 video in total.
 - **[PROPOSED]** Get ffmpeg through `imageio-ffmpeg`, which downloads it on first use, instead of bundling it (keeps the .exe small). Bundling is the alternative if your friend's PC can't download it.
 
+## 5b. Game events (level-up, death)
+
+- PoE1 has no combat log. The game writes a chat and events log, `Client.txt`, in its `logs` folder. The PC **tails** that file read-only, starting from the end, because it can be several GB. This is the same passive approach as many community tools, and it does not touch the game (no memory reading, no input, no overlay).
+- Built as a **general "log event → animation" system** configured in the settings page. **v1 events:**
+  - **Level-up**, from lines like `: CharName (Class) is now level 92`
+  - **Death**, from lines like `: CharName has been slain.`
+- **Own characters only.** Character names are learned automatically from the log and can be edited in settings. Lines about other players (party members) are ignored.
+- **Full-screen animation** for a few seconds, then back to the current page. Each event has a built-in default animation, with text rendered by the PC (e.g. "LEVEL 92"). The friend can replace it with their own GIF or video in the settings page, the same way as backgrounds, and can turn each event on or off.
+- Animations are stored on the screen in advance, so the PC only sends a small "play" message and playback starts within about a second. Events that happen while the screen is unplugged are dropped, not queued.
+- The `Client.txt` path is auto-detected (Steam and standalone install locations) and can be changed in settings.
+- Animations share the flash budget in §5 with the backgrounds.
+
 ## 6. Data sources
 
 - **WealthyExile** (core): stash value, items and tabs. No documented API, so we reverse-engineer the site's own JSON requests. All of that lives in one adapter module, with a `--dump` mode for raw responses.
@@ -104,6 +118,7 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 
 - Exact WealthyExile responses: do they include items, tabs, a chaos and divine total, league-start history? (Settled during reverse-engineering.)
 - What the friends' pricer is and how it exposes prices (local app? file? HTTP?).
+- Exact `Client.txt` line formats for level-up and death, and whether party members' events appear (checked against the friend's real log file).
 - Real frame rate for slides, GIF and video (measured as soon as the hardware arrives).
 - USB on the board: native USB or CH340 (matters for the Windows driver and for how fast data can be sent).
 
@@ -113,6 +128,7 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 2. PC: history, stats and the page renderer in **demo mode**, producing PNG previews on the Mac (no hardware needed).
 3. Settings page with live preview and page editor.
 4. Serial protocol (overlay transfer, touch events, heartbeat), tested against a simulated screen on the PC.
+4b. `Client.txt` event watcher (level-up, death), tested against sample log lines, then a real log.
 5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates.
 6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds.
 7. WealthyExile reverse-engineering (with your friend logged in), then the adapter.
