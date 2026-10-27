@@ -42,6 +42,7 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
 - **Tap**: ask the PC for a refresh. The PC refuses if the last fetch was under 60 s ago, and the screen shows "too soon".
 - **Long press** on the Session page: reset the session.
 - **Pagination dots**, drawn by the screen. They switch to a "4/9" counter when there are many pages.
+- **Boot animation**: at power-on the screen plays a GIF from its own flash once (no PC needed), then shows the pages, or the offline screen if the PC is not there yet. A default animation ships out of the box; the friend can replace it in the settings page (same upload and conversion as backgrounds).
 - **PC disconnected** after 90 s with no message, and the backlight dims. Full brightness returns on reconnect.
 - **Stale data** badge (rendered by the PC) if the last successful fetch is over 15 min old.
 - Firmware is flashed by the project owner before handing the screen over. The friend never flashes.
@@ -124,7 +125,7 @@ Decided 2026-10-27.
 - **Full-screen animation** for a few seconds, then back to the current page. Each event has a built-in default animation, with text rendered by the PC (e.g. "LEVEL 92"). The friend can replace it with their own GIF or video in the settings page, the same way as backgrounds, and can turn each event on or off.
 - Animations are stored on the screen in advance, so the PC only sends a small "play" message and playback starts within about a second. Events that happen while the screen is unplugged are dropped, not queued.
 - The `Client.txt` path is auto-detected (Steam and standalone install locations) and can be changed in settings.
-- Animations share the flash budget in §5 with the backgrounds.
+- Animations share the flash budget in §5 with the backgrounds and the boot animation.
 
 ## 6. Data sources
 
@@ -167,6 +168,6 @@ Decided 2026-10-27.
 4. Serial protocol (overlay transfer, touch events, heartbeat), tested against a simulated screen on the PC.
 4b. `Client.txt` event watcher (level-up, death), tested against sample log lines, then a real log.
 5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates.
-6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds.
+6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds, and the boot animation.
 7. WealthyExile reverse-engineering (with your friend logged in), then the adapter.
 8. Windows .exe, auto-start, install guide; final test on a Windows PC.
