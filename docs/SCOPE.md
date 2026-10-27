@@ -71,6 +71,7 @@ A fourth example page, **League** (since league start, today, best hour, item pr
 - **Stack or tab value** from WealthyExile: a specific stack or stash tab.
 - **Session/day stats**: gain today, best hour, and so on, from local history.
 - Text and clock (for layout).
+- **Notes** (added 2026-10-27): the friend's own text over several lines. Line breaks are kept, a line starting with "- " becomes a bullet, and placeholders are filled in. The text auto-fits the card by default, or uses a fixed size, and is cut with "…" when it cannot fit. A full-page note uses the "Single slot" template, below the page's top bar.
 
 **Session** resets when the script starts and on a long press. It does not reset daily.
 

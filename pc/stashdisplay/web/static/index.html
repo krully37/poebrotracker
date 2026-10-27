@@ -212,6 +212,9 @@
                     <input type="text" x-model="slot[opt.key]" :list="opt.key === 'name' ? 'item-suggestions' : null"
                            @input="opt.key === 'name' && suggestItems($event.target.value)">
                   </template>
+                  <template x-if="opt.kind === 'multiline'">
+                    <textarea rows="7" x-model="slot[opt.key]"></textarea>
+                  </template>
                   <template x-if="opt.kind === 'int'">
                     <input type="number" x-model.number="slot[opt.key]" :min="opt.minimum" :max="opt.maximum">
                   </template>

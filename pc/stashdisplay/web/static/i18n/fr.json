@@ -115,6 +115,8 @@
   "widget.item_price.desc": "Les prix d'objets choisis, depuis poe.ninja.",
   "widget.stack_value.name": "Ensemble ou onglet",
   "widget.stack_value.desc": "La valeur d'un ensemble d'objets ou d'un onglet.",
+  "widget.notes.name": "Notes",
+  "widget.notes.desc": "Votre propre texte sur plusieurs lignes. Les retours à la ligne sont gardés, une ligne qui commence par « - » devient une puce, et les variables comme {total} sont remplacées.",
   "widget.text.name": "Texte",
   "widget.text.desc": "Texte libre. Les variables comme {total}, {rate}, {league}, {time} sont remplacées.",
   "widget.clock.name": "Horloge",

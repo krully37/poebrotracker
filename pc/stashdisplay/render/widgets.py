@@ -30,7 +30,7 @@ NUMBER_FAMILY = "Fontin"
 @dataclass
 class Option:
     key: str
-    kind: str  # metric, text, bool, int, choice, font, weight, color, items
+    kind: str  # metric, text, multiline, bool, int, choice, font, weight, color, items
     default: Any
     label: str
     choices: list[str] = field(default_factory=list)
@@ -435,6 +435,93 @@ def render_text(ctx: Ctx, box: Box, o: dict) -> None:
         f = fit(s, o["font"], o["weight"], box.w, int(box.h * 0.75), max_size=120)
     color = color_for(o["color"], ctx.data, first_metric(o["text"]))
     draw.text_in(ctx, box, s, f, color, o["align"], "middle")
+
+
+NOTE_MIN, NOTE_MAX = 10, 72  # font sizes tried when the size is 0 (fit the card)
+
+
+def note_lines(paragraphs: list[str], f, width: int) -> list[tuple[bool, str, int]]:
+    """Word-wrap the note: (starts a bullet, text, indent) for each line on screen."""
+    out = []
+    for p in paragraphs:
+        bullet = p.startswith("- ")
+        indent = int(f.size * 0.9) if bullet else 0
+        words = (p[2:] if bullet else p).split()
+        if not words:
+            out.append((False, "", 0))  # blank line kept as spacing
+            continue
+        line, first = "", bullet
+        for word in words:
+            trial = f"{line} {word}" if line else word
+            if line and text_size(trial, f)[0] > width - indent:
+                out.append((first, line, indent))
+                line, first = word, False
+            else:
+                line = trial
+        out.append((first, line, indent))
+    return out
+
+
+def note_line_height(f) -> int:
+    ascent, descent = f.getmetrics()
+    return int((ascent + descent) * 1.08)
+
+
+@widget("notes", "Notes", "Your own text over several lines. Line breaks are kept, a line starting with \"- \" "
+        "becomes a bullet, and placeholders like {total} are filled in.", [
+    Option("title", "text", "Notes", "Title"),
+    Option("text", "multiline", "- Sell the divines\n- Buy a Mageblood\nSession so far: {session}", "Text"),
+    Option("size", "int", 0, "Size (0 = fit the slot)", minimum=0, maximum=NOTE_MAX),
+    Option("align", "choice", "left", "Alignment", choices=["left", "center", "right"]),
+    *_font_options(family=NAME_FAMILY, weight=400, color=WHITE),
+])
+def render_notes(ctx: Ctx, box: Box, o: dict) -> None:
+    box = list_title(ctx, box, o["title"])
+    paragraphs = fill_placeholders(str(o["text"]), ctx.data).replace("\r", "").split("\n")
+    while paragraphs and not paragraphs[-1].strip():
+        paragraphs.pop()
+    if not paragraphs:
+        empty(ctx, box, "Empty note")
+        return
+
+    def layout(size: int):
+        f = font(o["font"], size, o["weight"])
+        return f, note_lines(paragraphs, f, box.w), note_line_height(f)
+
+    if o["size"]:
+        f, lines, line_h = layout(o["size"])
+    else:
+        # The largest size at which every line fits; the smallest one otherwise.
+        lo, hi = NOTE_MIN, NOTE_MAX
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            _, mid_lines, mid_h = layout(mid)
+            lo, hi = (mid, hi) if len(mid_lines) * mid_h <= box.h else (lo, mid - 1)
+        f, lines, line_h = layout(lo)
+    if line_h > box.h:
+        # Not even one line fits (a thin footer slot): shrink until one does.
+        size = f.size
+        while size > 6 and line_h > box.h:
+            size -= 1
+            f, lines, line_h = layout(size)
+        if line_h > box.h:
+            return
+    room = box.h // line_h
+    cut = len(lines) > room
+    lines = lines[:room]
+    color = color_for(o["color"], ctx.data, None)
+    k = draw.SUPERSAMPLE
+    for i, (bullet, text, indent) in enumerate(lines):
+        if cut and i == len(lines) - 1:
+            text += "…"
+        text = draw.truncate(text, f, box.w - indent)
+        w = indent + text_size(text, f)[0]
+        x = {"left": box.x, "center": box.x + (box.w - w) / 2, "right": box.x + box.w - w}[o["align"]]
+        row = Box(int(x + indent), box.y + i * line_h, int(w - indent) + 2, line_h)
+        draw.text_in(ctx, row, text, f, color, "left", "middle")
+        if bullet:
+            r, cx, cy = f.size * 0.13, x + indent * 0.35, row.y + row.h / 2
+            draw.paint(ctx, GOLD, lambda d, cx=cx, cy=cy, r=r: d.ellipse(((cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k), fill=255), smooth=True)
 
 
 @widget("clock", "Clock", "The time, optionally with the date.", [

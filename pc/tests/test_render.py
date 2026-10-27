@@ -9,7 +9,8 @@ from stashdisplay.render import data as renderdata
 from stashdisplay.render import renderer
 from stashdisplay.render.templates import TEMPLATES
 from stashdisplay.render.theme import DOTS_TOP, HEIGHT, WIDTH
-from stashdisplay.render.widgets import WIDGETS, fill_placeholders
+from stashdisplay.render.fonts import NAME_FAMILY, font, text_size
+from stashdisplay.render.widgets import WIDGETS, fill_placeholders, note_lines
 
 NOW = time.time()
 
@@ -74,6 +75,24 @@ def test_widget_defaults_are_not_shared():
     a = pagelib.normalize_slot({"widget": "item_price"})
     a["items"].append("Headhunter")
     assert pagelib.normalize_slot({"widget": "item_price"})["items"] == ["Mirror of Kalandra"]
+
+
+def test_note_lines_wrap_and_bullets():
+    f = font(NAME_FAMILY, 20)
+    lines = note_lines(["- " + "word " * 30, "", "plain"], f, 200)
+    bullets = [b for b, _, _ in lines]
+    assert bullets[0] is True and not any(bullets[1:])  # only the first line of a bullet gets the dot
+    wrapped = [(t, i) for b, t, i in lines if t and t != "plain"]
+    assert len(wrapped) > 1 and all(i > 0 for _, i in wrapped)  # continuation lines stay indented
+    assert all(text_size(t, f)[0] <= 200 - i for t, i in wrapped)
+    assert ("", 0) in [(t, i) for _, t, i in lines]  # the blank line is kept
+    assert lines[-1] == (False, "plain", 0)
+
+
+def test_long_note_is_cut_not_overflowing(demo):
+    page = pagelib.normalize_page({"template": "full", "slots": {"main": {"widget": "notes", "text": "line\n" * 200}}})
+    overlay = renderer.overlay(page, demo)
+    assert overlay.crop((0, DOTS_TOP, WIDTH, HEIGHT)).getextrema()[3] == (0, 0)
 
 
 def test_placeholders(demo):
