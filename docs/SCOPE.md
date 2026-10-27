@@ -81,6 +81,33 @@ Decided 2026-10-27. This is a private tool that is never distributed, so it uses
 - Icons and fonts are **downloaded on first run and cached** in `%APPDATA%\stashdisplay\cache`. The icon index is refreshed at most once a week (~26 poe.ninja requests). Without the cache (offline, or download failed), the renderer falls back to bundled fonts and a drawn divine orb.
 - Not used: in-game text colours by item type.
 
+## 4c. Settings page (step 3)
+
+Decided 2026-10-27.
+
+**Access**
+- A **tray icon** next to the Windows clock shows the status (connected, last sync, errors). Its menu has Open settings, Refresh now, Start with Windows, and Quit.
+- The settings page opens in the browser. It is served on `127.0.0.1` only, and requests are checked so that other websites cannot change settings or read the cookie (a per-install token plus Host/Origin checks).
+- The interface is in **English and French**, with a switch. All text comes from a translation file. Item names stay as the game names them.
+
+**Editor**
+- Layout: the page list on the left (drag to reorder, show/hide, duplicate, add), the preview in the middle (480×320 at 2× zoom), and the options of the selected slot on the right.
+- **Click a slot on the preview** to select it. The side panel shows the widget type, its options (forms generated from each widget's option list), and the frame style. The page template and background are chosen under the preview.
+- The **preview is the real renderer**: the PC renders it after each edit, outdated requests are cancelled, and images are swapped without flicker. It shows the friend's **real data** once synced, with demo data before that and a switch to force demo data.
+- **Saving:** edits update the preview immediately, and **Save** writes the settings and sends the pages to the screen. Undo and redo work while editing, plus "Revert to last saved".
+- Extras in this step: **export/import** pages as a file, **reset to preset**, and a **fixed size** option for numbers. Swapping slots by drag comes later.
+
+**Settings beyond pages**
+- WealthyExile cookie: pasted into a masked field, with a "Test" button. On Windows it is stored encrypted with DPAPI (Windows' per-user encryption), not as plain text. It is not read from the browser automatically (Chrome encrypts its cookies, and that would mean touching the browser's credential store).
+- League, intervals, poe.ninja items, and Start with Windows.
+
+**Backgrounds in this step**
+- Upload, crop and convert images, GIFs and videos. The preview shows a still frame. The animated preview comes with the firmware media step, once the real frame rate is known.
+
+**Tech**
+- **Flask** served by **Waitress** (stable, pure Python, works well on Windows), plus **Alpine.js** bundled as a file (no CDN, no build step).
+- **Render speed:** 55–80 ms per page today (M-series Mac). The target is under 20 ms by cropping drawing work to each element's area instead of the full screen.
+
 ## 5. Backgrounds and media
 
 - Formats: **still image, GIF, video** (video is converted to MJPEG on the PC with ffmpeg).
@@ -119,7 +146,7 @@ Decided 2026-10-27. This is a private tool that is never distributed, so it uses
 |---|---|---|
 | PC language | Python 3.12+ | The brief's recommendation, with a good ecosystem for images (Pillow) and serial (pyserial) |
 | Page rendering | Pillow; PoE look (§4b); bundled open-licence fonts as fallback | The same code produces the preview and the screen image |
-| Settings page | Small local web server (Python) + plain HTML/JS, no build step | Nothing to install, and it opens in any browser |
+| Settings page | Flask + Waitress, Alpine.js bundled, no build step (see §4c) | Stable, nothing to install, and it opens in any browser |
 | Overlay transfer | RGB565 + 4-bit alpha, zlib-compressed, sent in chunks over USB serial | The ESP32 ROM has zlib inflate built in. Mostly-transparent overlays compress very well |
 | Firmware | Arduino core 3.x + Arduino_GFX (panel driver only), own compositor, JPEGDEC / AnimatedGIF (bitbank2) for media | No LVGL: it wouldn't be faster here, and the PC now does the layout |
 | Filesystem on screen | LittleFS | Standard on ESP32, survives power loss |
