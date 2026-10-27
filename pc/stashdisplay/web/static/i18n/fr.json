@@ -204,5 +204,22 @@
   "screen.connected": "Écran connecté",
   "screen.syncing": "Envoi à l'écran…",
   "screen.searching": "Écran introuvable",
-  "screen.off": "Liaison écran coupée"
+  "screen.off": "Liaison écran coupée",
+
+  "ev.title": "Événements du jeu",
+  "ev.hint": "Les montées de niveau et les morts de vos personnages lancent une animation plein écran. L'application lit seulement le journal du jeu, Client.txt.",
+  "ev.log": "Client.txt",
+  "ev.log.auto": "Trouver automatiquement",
+  "ev.log.found": "Lecture de",
+  "ev.log.missing": "Client.txt introuvable. Lancez le jeu une fois, ou indiquez son chemin (dossier logs du jeu).",
+  "ev.levelup": "Niveau gagné",
+  "ev.death": "Mort",
+  "ev.anim.default": "Animation intégrée",
+  "ev.anim.hint": "Votre GIF, image ou vidéo remplace l'animation intégrée. Tester joue le choix enregistré.",
+  "ev.test": "Tester",
+  "ev.test.offline": "L'écran n'est pas connecté.",
+  "ev.chars": "Vos personnages",
+  "ev.chars.none": "Aucun pour l'instant : ils apparaissent après leur prochain niveau gagné.",
+  "ev.chars.hint": "Repérés grâce aux niveaux gagnés. Les joueurs vus entrant dans votre zone sont exclus. Décochez un personnage pour l'ignorer.",
+  "ev.level": "niveau"
 }

@@ -36,7 +36,7 @@ COBS( type:u8 | seq:u16 LE | payload | crc32:u32 LE ) 0x00
 | 0x04 | CHUNK | PC → screen | binary: `xfer:u16 LE`, `offset:u32 LE`, then data |
 | 0x05 | END | PC → screen | `{"xfer"}`. The screen checks size and CRC, then stores the blob. |
 | 0x06 | DELETE | PC → screen | `{"id"}`: delete a file from flash. The ACK carries `flash_free`. |
-| 0x07 | PLAY | PC → screen | `{"file": id \| null, "overlay": "@event" \| null, "seconds"}`: full-screen event animation |
+| 0x07 | PLAY | PC → screen | `{"file": id \| null, "overlay": "@event" \| null, "seconds"}`: full-screen event animation. The file loops until `seconds` have passed (black if `file` is null), with the overlay on top. A new PLAY replaces the one playing. |
 | 0x08 | PING | PC → screen | `{}`: heartbeat |
 | 0x09 | EVENT_ACK | PC → screen | empty. The seq is the event's. |
 | 0x81 | ACK | screen → PC | `{"ok": true, ...}` or `{"ok": false, "error": "..."}`. The seq is the request's. |
@@ -63,7 +63,7 @@ The PC compares this with what it wants on the screen and only sends what differ
   - `overlay` goes to PSRAM under `id`: a page id, or `@event` for an event animation's text.
   - `file` goes to flash. `BEGIN` is refused with `"no_space"` (plus `flash_free`) when it cannot fit, counting the space a file of the same id would free.
   - `toast` is an overlay shown over the current page for `seconds` (default 2), then forgotten.
-- **File ids:** `bg-<hash>` are page backgrounds, `anim-*` event animations, `boot` the power-on animation. A page sync deletes stale `bg-*` files only.
+- **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations, `boot` the power-on animation. A sync deletes every file the PC no longer wants, except `boot`. Event animations are sent after the page list, so the pages show up first.
 - **Formats:** `jpeg` and `gif` are 480×320, ready to show. `mjpeg` comes with the video step.
 
 ## Overlay format

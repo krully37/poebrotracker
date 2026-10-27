@@ -34,6 +34,8 @@ STATIC = Path(__file__).with_name("static")
 COOKIE = "sd_token"
 WRITE_HEADER = "X-Stashdisplay"
 SIM_FPS = 20
+EVENT_NAMES = {"levelup": "Level-up", "death": "Death"}
+SIM_CHARACTER = ("Testchar", "Witch")
 PLACEHOLDERS = ["total", "rate", "session", "today", "best_hour", "league_gain", "div_price",
                 "league", "time", "date", "session_since", "session_duration", "synced"]
 
@@ -120,6 +122,7 @@ def create_app(app: App) -> Flask:
             "live": app.live_data is not None,
             "autostart": {"supported": autostart.supported(), "enabled": autostart.enabled()},
             "screen": screen_status(),
+            "events": app.events_status(),
         }
 
     @web.get("/api/state")
@@ -223,6 +226,7 @@ def create_app(app: App) -> Flask:
     def media_delete(media_id: str):
         in_use = [p["name"] for p in store.pages
                   if p["background"]["kind"] != "color" and p["background"]["value"] == media_id]
+        in_use += [EVENT_NAMES[k] for k in EVENT_NAMES if store.settings["events"][k]["media"] == media_id]
         if in_use:
             return jsonify({"error": "in_use", "pages": in_use}), 409
         try:
@@ -291,6 +295,48 @@ def create_app(app: App) -> Flask:
         sim, _ = simulator()
         sim.power_cycle()
         return jsonify(screen_status())
+
+    # --- Game events -------------------------------------------------------------------
+
+    @web.get("/api/events")
+    def get_events():
+        return jsonify(app.events_status())
+
+    @web.post("/api/events/character")
+    def set_character():
+        body = request.get_json(force=True) or {}
+        app.characters.set_enabled(str(body.get("name", "")), bool(body.get("enabled")))
+        return jsonify(app.events_status())
+
+    @web.post("/api/events/test")
+    def test_event():
+        kind = (request.get_json(force=True) or {}).get("kind")
+        if kind not in EVENT_NAMES:
+            abort(400)
+        own = app.characters.listing()
+        name, level = (own[0]["name"], own[0]["level"]) if own else ("Exile", 92)
+        return jsonify({"played": app.play_event(kind, name, level if kind == "levelup" else None, force=True)})
+
+    @web.post("/api/sim/log")
+    def sim_log():
+        """Append fake Client.txt lines, so the whole path from the log to the screen runs."""
+        simulator()
+        kind = (request.get_json(force=True) or {}).get("kind")
+        name, char_class = SIM_CHARACTER
+        known = {c["name"]: c for c in app.characters.listing()}
+        level = (known.get(name, {}).get("level") or 1) + 1
+        stamp = time.strftime("%Y/%m/%d %H:%M:%S") + " 123456789 cffb0734 [INFO Client 4242] : "
+        lines = {
+            "levelup": [f"{name} ({char_class}) is now level {min(level, 100)}"],
+            "death": [f"{name} has been slain."],
+            # Someone joins the party's area, then levels up: ignored.
+            "party": ["Partymate has joined the area.", "Partymate (Marauder) is now level 64"],
+        }.get(kind)
+        if lines is None or app.fake_log is None:
+            abort(400)
+        with open(app.fake_log, "a", encoding="utf-8", newline="") as f:
+            f.writelines(stamp + line + "\r\n" for line in lines)
+        return jsonify({"ok": True})
 
     # --- Windows autostart ----------------------------------------------------------
 

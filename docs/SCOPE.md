@@ -121,10 +121,14 @@ Decided 2026-10-27.
 - Built as a **general "log event → animation" system** configured in the settings page. **v1 events:**
   - **Level-up**, from lines like `: CharName (Class) is now level 92`
   - **Death**, from lines like `: CharName has been slain.`
-- **Own characters only.** Character names are learned automatically from the log and can be edited in settings. Lines about other players (party members) are ignored.
-- **Full-screen animation** for a few seconds, then back to the current page. Each event has a built-in default animation, with text rendered by the PC (e.g. "LEVEL 92"). The friend can replace it with their own GIF or video in the settings page, the same way as backgrounds, and can turn each event on or off.
+- Only system lines count (`] : ` right after the log prefix), so typing those words in chat triggers nothing.
+- **Own characters only.** A name in a level-up line is taken as one of the friend's characters, unless that name was ever seen joining or leaving the area (only other players do that). The settings page lists the learned characters with a tick box each. Known gaps: a party member who levels up before ever sharing an area is learned by mistake (untick it), and a new character that dies before its first level-up is not known yet.
+- **Every level-up plays**; there is no level threshold. Each event can be turned on or off.
+- **Full-screen animation**, then back to the current page. The built-in animations are GIFs made for this project (`pc/stashdisplay/assets/anims/`), shown as they are, with no text on top. A GIF plays once; one shorter than 3 s loops until 3 s, and anything past 10 s is cut. The friend can replace each one with their own GIF, image or video in the settings page.
+- **Until a GIF exists** (or if it does not fit on the screen), the PC sends a text card instead: "Level 92" or "Slain", with the character name, for 4 s.
+- **Bursts:** the newest event replaces the one playing, except that a level-up never cuts a death short.
 - Animations are stored on the screen in advance, so the PC only sends a small "play" message and playback starts within about a second. Events that happen while the screen is unplugged are dropped, not queued.
-- The `Client.txt` path is auto-detected (Steam and standalone install locations) and can be changed in settings.
+- The `Client.txt` path is auto-detected (the standalone install, Steam and its other library folders; the most recently written one wins) and can be changed in settings. The file is read from its end at start-up, opened only for each read (so it can still be deleted), and read from the start again when it is emptied or replaced.
 - Animations share the flash budget in §5 with the backgrounds and the boot animation.
 
 ## 6. Data sources
@@ -157,7 +161,7 @@ Decided 2026-10-27.
 
 - Exact WealthyExile responses: do they include items, tabs, a chaos and divine total, league-start history? (Settled during reverse-engineering.)
 - What the friends' pricer is and how it exposes prices (local app? file? HTTP?).
-- Exact `Client.txt` line formats for level-up and death, and whether party members' events appear (checked against the friend's real log file).
+- `Client.txt` line formats: taken from community log tools (English client), not yet checked against the friend's real log file, nor whether party members' level-ups and deaths appear there.
 - Real frame rate for slides, GIF and video (measured as soon as the hardware arrives).
 - USB on the board: native USB or CH340 (matters for the Windows driver and for how fast data can be sent).
 - XP/hour: register an app with GGG's developer program (see §6), and whether that registration is approved.

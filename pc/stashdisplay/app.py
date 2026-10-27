@@ -1,4 +1,5 @@
-"""The running app: settings, assets, media, history, the data shown on the pages, and the screen.
+"""The running app: settings, assets, media, history, the data shown on the pages, the screen,
+and the game events read from Client.txt.
 
 The settings page, the tray and the screen link all talk to one App. Until the WealthyExile
 step, the history is demo data that grows by one point every 5 minutes, so the screen and
@@ -14,22 +15,25 @@ from collections.abc import Callable
 
 from . import paths
 from .assets import AssetCache
+from .gamelog import Characters, GameEvent, LogWatcher, find_client_log
 from .link import protocol
 from .link.client import Content, ScreenLink
 from .link.content import ContentBuilder
 from .link.transport import Port, SerialPort, candidate_ports
 from .media import MediaStore
 from .render import data as renderdata
-from .render import fonts, renderer
+from .render import fonts, renderer, theme
 from .settings import Store
 
 log = logging.getLogger(__name__)
 
 TOASTS = {"reset_session": "Session reset", "reset_rate": "Div/h reset"}
+EVENT_KINDS = ("levelup", "death")
+CARD_SECONDS = 4.0  # the text stand-in for an event without a GIF
 
 
 class App:
-    def __init__(self, store: Store, assets: AssetCache, media: MediaStore):
+    def __init__(self, store: Store, assets: AssetCache, media: MediaStore, characters: Characters | None = None):
         self.store = store
         self.assets = assets
         self.media = media
@@ -44,12 +48,17 @@ class App:
         self.content = ContentBuilder(media)
         self.link: ScreenLink | None = None
         self.simulator = None  # (SimScreen, LoopbackPair) when started with --simulator
+        self.characters = characters or Characters(None)
+        self.watcher: LogWatcher | None = None
+        self.fake_log = None  # with --simulator: a test Client.txt the simulator page writes to
+        self.anim_files: dict[str, tuple[str, float]] = {}  # event kind -> (screen file id, seconds)
+        self._playing: tuple[str, float] | None = None  # (event kind, monotonic end)
 
     @classmethod
     def create(cls, offline: bool = False) -> "App":
         store = Store.load(paths.settings_path())
         assets = AssetCache(offline=offline)
-        app = cls(store, assets, MediaStore(paths.app_dir() / "media"))
+        app = cls(store, assets, MediaStore(paths.app_dir() / "media"), Characters(paths.characters_path()))
         fonts.register_fontin(assets.fontin())
         return app
 
@@ -104,7 +113,17 @@ class App:
     def screen_content(self) -> Content:
         data, _ = self.render_data()
         with self._render_lock:
-            return self.content.build(self.store.pages, data)
+            content = self.content.build(self.store.pages, data)
+            anim_files = {}
+            for kind in EVENT_KINDS:
+                opts = self.store.settings["events"][kind]
+                anim = self.content.animation(kind, opts["media"]) if opts["enabled"] else None
+                if anim:
+                    file_id, f, seconds = anim
+                    content.files[file_id] = f
+                    anim_files[kind] = (file_id, seconds)
+            self.anim_files = anim_files
+        return content
 
     def _screen_sync(self) -> None:
         if self.link:
@@ -136,6 +155,50 @@ class App:
                 self.history.save()
             self.toast(TOASTS[event["action"]])
             self._screen_sync()
+
+    # --- Game events ---------------------------------------------------------------------
+
+    def client_log(self):
+        """Client.txt: the configured path, else the simulator's test log, else the one found."""
+        configured = self.store.settings["events"]["client_log"]
+        if not configured and self.fake_log is not None:
+            return self.fake_log
+        return find_client_log(configured)
+
+    def start_watcher(self) -> LogWatcher:
+        self.watcher = LogWatcher(self.client_log, self.characters, self.on_game_event).start()
+        return self.watcher
+
+    def on_game_event(self, event: GameEvent) -> None:
+        if self.store.settings["events"][event.kind]["enabled"]:
+            self.play_event(event.kind, event.name, event.level)
+
+    def play_event(self, kind: str, name: str, level: int | None = None, force: bool = False) -> bool:
+        """Full-screen animation for an event. The newest replaces the one playing, except
+        that a level-up never cuts a death short. False when the screen is not there."""
+        now = time.monotonic()
+        if not force and kind == "levelup" and self._playing and self._playing[0] == "death" and now < self._playing[1]:
+            return False
+        if not self.link:
+            return False
+        file_id, seconds = self.anim_files.get(kind, (None, CARD_SECONDS))
+        if file_id and self.link.has_file(file_id):
+            played = self.link.play(file_id, None, seconds)
+        else:
+            # No GIF on the screen (none made yet, or no room): large text instead.
+            title = f"Level {level}" if kind == "levelup" else "Slain"
+            with self._render_lock:
+                card = renderer.event_card(title, name, color=theme.TITLE if kind == "levelup" else theme.DEATH)
+                overlay = protocol.encode_overlay(card)
+            seconds = CARD_SECONDS
+            played = self.link.play(None, overlay, seconds)
+        if played:
+            self._playing = (kind, now + seconds)
+        return played
+
+    def events_status(self) -> dict:
+        return {**(self.watcher.status() if self.watcher else {"path": None, "found": False, "last_event": None}),
+                "characters": self.characters.listing()}
 
     def refresh(self, now: float) -> None:
         """Fetch new data now. Demo: one more point, timed now."""

@@ -19,8 +19,9 @@ log = logging.getLogger(__name__)
 
 RETRY_CONNECT = 2.0  # seconds between attempts to find the screen
 RESYNC_EVERY = 60  # pages are re-rendered every minute (clock, "synced X ago")
-# Files the PC manages elsewhere (event animations, boot animation): never deleted by a page sync.
-PROTECTED_PREFIXES = ("anim-", "boot")
+# Files the PC manages elsewhere (the boot animation): never deleted by a page sync.
+PROTECTED_PREFIXES = ("boot",)
+ANIM_PREFIX = "anim-"  # event animations (level-up, death)
 
 
 class LinkError(Exception):
@@ -93,8 +94,15 @@ class ScreenLink:
     def toast(self, overlay: bytes, seconds: float = 2.0) -> None:
         self.jobs.put(("toast", overlay, seconds))
 
-    def play(self, file_id: str | None, overlay: bytes | None, seconds: float) -> None:
+    def play(self, file_id: str | None, overlay: bytes | None, seconds: float) -> bool:
+        """Play an event animation now. Dropped (False) while the screen is away: old news by then."""
+        if self.state == "searching":
+            return False
         self.jobs.put(("play", file_id, overlay, seconds))
+        return True
+
+    def has_file(self, file_id: str) -> bool:
+        return self.state != "searching" and file_id in self.inventory.get("files", {})
 
     # --- Connection ------------------------------------------------------------------------
 
@@ -176,22 +184,16 @@ class ScreenLink:
         content = self.content()
         have_files = self.inventory.setdefault("files", {})
         have_overlays = self.inventory.setdefault("overlays", {})
-        # Free space first, then files, then overlays (the page on screen first), then the page list.
+        # Free space first, then backgrounds, overlays (the page on screen first), the page list, animations.
         for file_id in list(have_files):
             if file_id not in content.files and not file_id.startswith(PROTECTED_PREFIXES):
                 reply = self._request(p.DELETE, {"id": file_id})
                 have_files.pop(file_id, None)
                 self.info["flash_free"] = reply.get("flash_free", self.info.get("flash_free"))
-        missing_files = set()
-        for file_id, f in content.files.items():
-            if have_files.get(file_id, {}).get("crc") == f.crc:
-                continue
-            try:
-                self._transfer("file", file_id, f.data, format=f.format)
-                have_files[file_id] = {"crc": f.crc, "size": len(f.data), "format": f.format}
-            except NoSpace:
-                missing_files.add(file_id)
-        self.info["error"] = "Not enough space on the screen for every background" if missing_files else None
+        # Backgrounds before the pages that use them; event animations last, so pages show up first.
+        backgrounds = {k: f for k, f in content.files.items() if not k.startswith(ANIM_PREFIX)}
+        anims = {k: f for k, f in content.files.items() if k.startswith(ANIM_PREFIX)}
+        missing_files = self._upload(backgrounds, have_files)
         pages = sorted(content.pages, key=lambda pg: pg.id != self.current_page)
         for page in pages:
             if have_overlays.get(page.id) != page.crc:
@@ -204,9 +206,24 @@ class ScreenLink:
         ]})
         for stale in [k for k in have_overlays if k not in {pg.id for pg in content.pages}]:
             del have_overlays[stale]
+        missing_files |= self._upload(anims, have_files)
+        self.info["error"] = "Not enough space on the screen for every background and animation" if missing_files else None
         self.last_sync = self.clock()
         self.info["last_sync"] = time.time()
         self.state = "connected"
+
+    def _upload(self, files: dict[str, FileContent], have_files: dict) -> set[str]:
+        """Send the files the screen lacks. Returns the ids that did not fit."""
+        missing = set()
+        for file_id, f in files.items():
+            if have_files.get(file_id, {}).get("crc") == f.crc:
+                continue
+            try:
+                self._transfer("file", file_id, f.data, format=f.format)
+                have_files[file_id] = {"crc": f.crc, "size": len(f.data), "format": f.format}
+            except NoSpace:
+                missing.add(file_id)
+        return missing
 
     def _transfer(self, kind: str, blob_id: str, data: bytes, **meta) -> None:
         for _attempt in range(2):

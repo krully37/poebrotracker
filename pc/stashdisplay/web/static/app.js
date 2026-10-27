@@ -54,6 +54,7 @@ document.addEventListener("alpine:init", () => {
     cookieStatus: { kind: "", text: "" },
     autostart: { supported: false, enabled: false },
     screen: { state: "off", simulator: false },
+    events: { path: null, found: false, characters: [] },
     saving: false,
     addOpen: false,
     dragFrom: null,
@@ -99,6 +100,7 @@ document.addEventListener("alpine:init", () => {
       this.autostart = state.autostart;
       this.isDemo = !state.live;
       this.screen = state.screen;
+      this.events = state.events;
       this.pageIndex = Math.min(this.pageIndex, this.draft.pages.length - 1);
     },
 
@@ -277,7 +279,7 @@ document.addEventListener("alpine:init", () => {
       Object.assign(this.page.background, { kind: m.kind, value: m.id });
     },
 
-    async uploadMedia(event) {
+    async uploadMedia(event, use = (m) => this.useMedia(m)) {
       const file = event.target.files[0];
       event.target.value = "";
       if (!file) return;
@@ -289,7 +291,7 @@ document.addEventListener("alpine:init", () => {
         if (meta.error) throw new Error(meta.error);
         if (meta.needs_still) meta = await this.extractVideoStill(file, meta.id);
         this.media = [meta, ...this.media.filter((m) => m.id !== meta.id)];
-        this.useMedia(meta);
+        use(meta);
       } catch (e) {
         this.notify(this.t("bg.upload.error") + " " + e.message);
       } finally {
@@ -479,8 +481,20 @@ document.addEventListener("alpine:init", () => {
 
     async pollScreen() {
       try {
-        this.screen = await api("/api/screen").then((r) => r.json());
+        [this.screen, this.events] = await Promise.all([
+          api("/api/screen").then((r) => r.json()),
+          api("/api/events").then((r) => r.json()),
+        ]);
       } catch (e) { /* the app is gone; the next save says so */ }
+    },
+
+    async setCharacter(name, enabled) {
+      this.events = await api("/api/events/character", { method: "POST", json: { name, enabled } }).then((r) => r.json());
+    },
+
+    async testEvent(kind) {
+      const r = await api("/api/events/test", { method: "POST", json: { kind } }).then((x) => x.json());
+      if (!r.played) this.notify(this.t("ev.test.offline"));
     },
 
     notify(text) {

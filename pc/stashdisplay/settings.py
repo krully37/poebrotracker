@@ -27,6 +27,12 @@ DEFAULTS: dict = {
     "league": "",                  # poe.ninja league id; "" = current challenge league
     "poeninja": {"enabled": True, "interval": 1800},
     "serial": {"port": ""},        # "" = detect the screen automatically
+    # Game events from Client.txt. "media": an uploaded file id, "" = the built-in animation.
+    "events": {
+        "client_log": "",          # "" = find Client.txt automatically
+        "levelup": {"enabled": True, "media": ""},
+        "death": {"enabled": True, "media": ""},
+    },
     "web": {"port": 47821},
 }
 

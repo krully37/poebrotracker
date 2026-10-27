@@ -38,6 +38,12 @@
       <button class="btn" id="cable">Unplug the cable</button>
       <button class="btn" id="power">Power cycle</button>
       <p class="hint">Unplugged, the screen switches to "PC disconnected" and dims after 90 s, like the real one. A power cycle loses the pages kept in memory but keeps the stored backgrounds.</p>
+      <h2>Game log</h2>
+      <p class="hint">Adds a line to a test Client.txt, as the game would. The app reads it like the real one.</p>
+      <button class="btn" data-log="levelup">Testchar levels up</button>
+      <button class="btn" data-log="death">Testchar is slain</button>
+      <button class="btn" data-log="party">A party member levels up</button>
+      <p class="hint">The party member joined the area first, so the app knows it is someone else and plays nothing.</p>
     </section>
   </main>
 </div>
@@ -69,6 +75,7 @@
   screenEl.addEventListener("pointercancel", (e) => { if (down) { down = false; touch("up", e); } });
 
   document.getElementById("cable").onclick = async () => { show(await post("/api/sim/cable", { plugged: !plugged })); };
+  document.querySelectorAll("[data-log]").forEach((b) => { b.onclick = () => post("/api/sim/log", { kind: b.dataset.log }); });
   document.getElementById("power").onclick = async () => { show(await post("/api/sim/power")); };
 
   function show(s) {

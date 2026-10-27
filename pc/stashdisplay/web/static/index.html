@@ -299,6 +299,43 @@
     </section>
 
     <section class="panel">
+      <h2 x-text="t('ev.title')"></h2>
+      <p class="hint" x-text="t('ev.hint')"></p>
+      <label><span x-text="t('ev.log')"></span>
+        <input type="text" x-model="draft.settings.events.client_log" :placeholder="t('ev.log.auto')"></label>
+      <p class="status" :class="events.found ? 'ok' : 'warn'"
+         x-text="events.found ? t('ev.log.found') + ' ' + events.path : t('ev.log.missing')"></p>
+      <template x-for="kind in ['levelup', 'death']" :key="kind">
+        <div class="event-row">
+          <label class="inline"><input type="checkbox" x-model="draft.settings.events[kind].enabled">
+            <span x-text="t('ev.' + kind)"></span></label>
+          <select x-model="draft.settings.events[kind].media" :disabled="!draft.settings.events[kind].enabled">
+            <option value="" x-text="t('ev.anim.default')"></option>
+            <template x-for="m in media" :key="m.id">
+              <option :value="m.id" :selected="m.id === draft.settings.events[kind].media" x-text="m.name"></option>
+            </template>
+          </select>
+          <label class="btn small">
+            <span x-text="uploading ? t('bg.uploading') : '+ ' + t('bg.upload')"></span>
+            <input type="file" accept="image/*,video/*" hidden :disabled="uploading"
+                   @change="uploadMedia($event, (m) => { draft.settings.events[kind].media = m.id; })">
+          </label>
+          <button class="btn small" @click="testEvent(kind)" x-text="t('ev.test')"></button>
+        </div>
+      </template>
+      <p class="hint" x-text="t('ev.anim.hint')"></p>
+      <h3 x-text="t('ev.chars')"></h3>
+      <p class="hint" x-show="!events.characters.length" x-text="t('ev.chars.none')"></p>
+      <div class="checks">
+        <template x-for="c in events.characters" :key="c.name">
+          <label><input type="checkbox" :checked="c.enabled" @change="setCharacter(c.name, $event.target.checked)">
+            <span x-text="`${c.name} (${c.class}${c.level ? ', ' + t('ev.level') + ' ' + c.level : ''})`"></span></label>
+        </template>
+      </div>
+      <p class="hint" x-show="events.characters.length" x-text="t('ev.chars.hint')"></p>
+    </section>
+
+    <section class="panel">
       <h2 x-text="t('set.app')"></h2>
       <div class="grid2">
         <label><span x-text="t('set.port')"></span>

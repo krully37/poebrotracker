@@ -25,6 +25,7 @@ HEADER_EDGE = "#15110C"    # header gradient, edges
 HEADER_MID = "#3B3022"     # header gradient, centre
 TITLE = "#E6D5A5"          # header text
 LABEL = "#A08A68"          # small labels and muted names in frames
+DEATH = "#C8402E"          # the death event card
 
 
 def signed_color(value: float | None) -> str:

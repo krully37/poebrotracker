@@ -18,6 +18,7 @@ from . import draw, frames
 from .data import RenderData, fmt_duration
 from .draw import Ctx
 from .fonts import NAME_FAMILY, TITLE_FAMILY, font, text_size
+from .fonts import fit as fit_font
 from .templates import HEADER_BOX, TEMPLATES, Box
 from .theme import BACKGROUND, DOTS_Y, FAINT, HEIGHT, LABEL, MUTED, STALE, TITLE, WHITE, WIDTH
 from .widgets import NUMBER_FAMILY, WIDGETS, faint_frame, slot_title, without_title
@@ -133,6 +134,18 @@ def toast(text: str) -> Image.Image:
     draw.paint(ctx, "#0A0806", lambda d: d.rectangle((box.x, box.y, box.x + box.w, box.y + box.h), fill=255), alpha=235)
     frames.tooltip(ctx, box)
     draw.text_in(ctx, box, text, f, TITLE, "center")
+    return ctx.img
+
+
+def event_card(title: str, subtitle: str, color: str = TITLE) -> Image.Image:
+    """Stand-in for an event animation that has no GIF: large text on a dark screen."""
+    ctx = Ctx(Image.new("RGBA", (WIDTH, HEIGHT), "#050403"), None)  # type: ignore[arg-type]
+    box = Box(40, 92, WIDTH - 80, 136)
+    frames.tooltip(ctx, box)
+    tf = fit_font(title, TITLE_FAMILY, 400, box.w - 40, 64)
+    draw.text_in(ctx, Box(box.x, box.y + 14, box.w, 76), title, tf, color, "center")
+    sf = font(NAME_FAMILY, 20, 400)
+    draw.text_in(ctx, Box(box.x, box.y + 92, box.w, 28), draw.truncate(subtitle, sf, box.w - 40), sf, LABEL, "center")
     return ctx.img
 
 

@@ -1,5 +1,5 @@
 """What the screen should hold: the visible pages' overlays, their backgrounds as screen-ready
-files, and where a long press resets something."""
+files, where a long press resets something, and the event animations (level-up, death)."""
 
 import hashlib
 import io
@@ -16,6 +16,12 @@ from . import protocol as p
 from .client import Content, FileContent, PageContent
 
 JPEG_QUALITY = 88
+# Built-in event animations, made for this project: assets/anims/levelup.gif and death.gif.
+ANIM_DIR = Path(__file__).resolve().parent.parent / "assets" / "anims"
+ANIM_FIT = {"fit": "cover", "x": 50, "y": 50}
+STILL_SECONDS = 4.0  # an image (or a video's still frame, for now) shown for an event
+MIN_SECONDS = 3.0  # shorter GIFs loop until then
+MAX_SECONDS = 10.0
 
 
 class ContentBuilder:
@@ -24,6 +30,7 @@ class ContentBuilder:
     def __init__(self, media: MediaStore):
         self.media = media
         self.files: dict[str, FileContent] = {}
+        self.seconds: dict[str, float] = {}  # how long each animation file plays
 
     def build(self, pages: list[dict], data: RenderData) -> Content:
         shown, files = [], {}
@@ -54,6 +61,38 @@ class ContentBuilder:
             else:
                 return {"color": BACKGROUND}
         return {"file": file_id, "color": BACKGROUND}
+
+
+    def animation(self, kind: str, media_id: str = "") -> tuple[str, FileContent, float] | None:
+        """The screen file for an event: the friend's upload, else the built-in one, else None."""
+        source = self.media.source_path(media_id) if media_id else None
+        if source is not None:
+            meta = self.media.get(media_id)
+            still = self.media.still_path(media_id)
+            is_gif = meta["kind"] == "gif"
+        else:
+            source = still = ANIM_DIR / f"{kind}.gif"
+            if not source.is_file():
+                return None
+            is_gif = True
+        key = f"{kind}|{source}|{source.stat().st_mtime}"
+        file_id = f"anim-{kind}-" + hashlib.sha1(key.encode()).hexdigest()[:8]
+        if file_id not in self.files:
+            if is_gif:
+                data = gif_for_screen(source, ANIM_FIT)
+                self.seconds[file_id] = min(MAX_SECONDS, max(MIN_SECONDS, gif_seconds(data)))
+                self.files[file_id] = FileContent(data, "gif")
+            elif still is not None:
+                self.files[file_id] = FileContent(jpeg_for_screen(still, ANIM_FIT), "jpeg")
+                self.seconds[file_id] = STILL_SECONDS
+            else:
+                return None
+        return file_id, self.files[file_id], self.seconds[file_id]
+
+
+def gif_seconds(data: bytes) -> float:
+    with Image.open(io.BytesIO(data)) as im:
+        return sum(frame.info.get("duration", 100) for frame in ImageSequence.Iterator(im)) / 1000
 
 
 def jpeg_for_screen(path: Path, bg: dict) -> bytes:

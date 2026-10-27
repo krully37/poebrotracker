@@ -34,6 +34,10 @@ def history_path() -> Path:
     return app_dir() / "history.json"
 
 
+def characters_path() -> Path:
+    return app_dir() / "characters.json"
+
+
 def log_path() -> Path:
     return app_dir() / "stashdisplay.log"
 

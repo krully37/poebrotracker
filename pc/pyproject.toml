@@ -26,7 +26,7 @@ stashdisplay = "stashdisplay.cli:main"
 include = ["stashdisplay*"]
 
 [tool.setuptools.package-data]
-stashdisplay = ["assets/fonts/*", "web/static/*", "web/static/i18n/*"]
+stashdisplay = ["assets/fonts/*", "assets/anims/*", "web/static/*", "web/static/i18n/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

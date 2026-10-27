@@ -119,9 +119,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         app.simulator = (SimScreen(pair.screen), pair)
         SimRunner(app.simulator[0]).start()
         app.start_link(lambda: [pair.pc] if pair.plugged else [])
+        # A test Client.txt that the simulator page writes fake level-ups and deaths to.
+        app.fake_log = paths.app_dir() / "Client-sim.txt"
+        app.fake_log.touch()
         print(f"Simulated screen: {server.url(app).split('?')[0]}simulator")
     else:
         app.start_link()
+    app.start_watcher()
     if first_start:
         tray.open_settings(app)
     if args.no_tray:

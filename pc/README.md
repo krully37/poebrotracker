@@ -26,7 +26,7 @@ This starts the settings page on `127.0.0.1` a tray icon, and the link to the sc
 .venv/bin/python -m stashdisplay run --no-tray --simulator
 ```
 
-The app then talks to a simulated screen instead of the USB one, over the real protocol ([docs/PROTOCOL.md](../docs/PROTOCOL.md)). Open the **Simulator** tab in the settings page: it shows the screen exactly as the firmware will composite it. Click to tap, drag sideways to change page, and hold on a session or div/h value to reset it. The page also has buttons to unplug the cable and power-cycle the screen.
+The app then talks to a simulated screen instead of the USB one, over the real protocol ([docs/PROTOCOL.md](../docs/PROTOCOL.md)). Open the **Simulator** tab in the settings page: it shows the screen exactly as the firmware will composite it. Click to tap, drag sideways to change page, and hold on a session or div/h value to reset it. The page also has buttons to unplug the cable and power-cycle the screen, and to write fake level-up, death and party-member lines to a test `Client.txt` (`Client-sim.txt` in the app folder), which the app follows like the game's own log.
 
 The settings, pages, uploaded backgrounds and log live in `%APPDATA%\stashdisplay` on Windows and `~/Library/Application Support/stashdisplay` on macOS. Set `STASHDISPLAY_HOME` to use another folder, for example a throwaway one while testing.
 
@@ -63,12 +63,14 @@ The first run downloads the game icons and the Fontin font into the local cache 
 | `settings.py` | `settings.json`: settings, pages, the sealed cookie, the page token |
 | `vault.py` | Cookie encryption (Windows DPAPI; base64 + owner-only file elsewhere) |
 | `media.py` | Uploaded backgrounds: images, GIFs, videos and their still frames |
+| `gamelog.py` | Follows the game's `Client.txt`: level-ups and deaths, which characters are the friend's |
 | `app.py` | The running app shared by the settings page and the tray |
 | `web/` | Settings page: Flask API (`server.py`) and the Alpine.js editor (`static/`) |
 | `tray.py` | Tray icon and menu |
 | `autostart.py` | "Start with Windows" (registry Run key) |
 | `link/protocol.py` | Serial framing, message types, overlay format, timings |
 | `link/client.py` | PC end of the link: finds the screen, syncs pages and files, handles touch events |
-| `link/content.py` | What the screen should hold: overlays, backgrounds as JPEG/GIF, reset zones |
+| `link/content.py` | What the screen should hold: overlays, backgrounds and event animations as JPEG/GIF, reset zones |
+| `assets/anims/` | Built-in level-up and death animations (see its README) |
 | `link/simulator.py` | Simulated screen (what the firmware will do) |
 | `link/transport.py` | Serial port detection, and the in-process cable used by the simulator |

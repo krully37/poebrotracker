@@ -128,5 +128,22 @@
   "screen.connected": "Screen connected",
   "screen.syncing": "Sending to the screen…",
   "screen.searching": "Screen not found",
-  "screen.off": "Screen link off"
+  "screen.off": "Screen link off",
+
+  "ev.title": "Game events",
+  "ev.hint": "Level-ups and deaths of your characters play a full-screen animation. The app only reads the game's log file, Client.txt.",
+  "ev.log": "Client.txt",
+  "ev.log.auto": "Find automatically",
+  "ev.log.found": "Reading",
+  "ev.log.missing": "Client.txt not found. Start the game once, or enter its path (the logs folder of the game).",
+  "ev.levelup": "Level-up",
+  "ev.death": "Death",
+  "ev.anim.default": "Built-in animation",
+  "ev.anim.hint": "Your own GIF, image or video replaces the built-in animation. Test plays the saved choice.",
+  "ev.test": "Test",
+  "ev.test.offline": "The screen is not connected.",
+  "ev.chars": "Your characters",
+  "ev.chars.none": "None yet: they appear here after their next level-up.",
+  "ev.chars.hint": "Learned from level-ups. Players seen joining your area are left out. Untick a character to ignore it.",
+  "ev.level": "level"
 }
