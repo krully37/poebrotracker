@@ -136,6 +136,8 @@ class AssetCache:
         return hits[:limit]
 
     def _fetch_index(self) -> dict:
+        # poe.ninja lists the current softcore trade league first. Once WealthyExile is read
+        # (step 7), prices follow the league it reports instead.
         league = self.http.get(f"{NINJA}/leagues", timeout=15).json()[0]["id"]
         icons: dict[str, str] = {}
         names: dict[str, str] = {}

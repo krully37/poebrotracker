@@ -115,8 +115,6 @@
   "we.howto.warning": "The cookie works like a password for your WealthyExile account: never share it. If WealthyExile logs you out, do this again to paste a fresh one.",
 
   "set.data": "Data",
-  "set.league": "League",
-  "set.league.auto": "Current challenge league",
   "set.interval": "Fetch every (seconds)",
   "set.min_refresh": "Tap refresh at most every (seconds)",
   "set.rate_window": "Divines/hour over (minutes)",

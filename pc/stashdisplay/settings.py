@@ -24,7 +24,6 @@ DEFAULTS: dict = {
     "rate_window_minutes": 60,     # div/h is computed over this window
     "spark_points": 48,            # points in the sparkline (48 x 5 min = 4 h)
     "new_session_on_start": True,
-    "league": "",                  # poe.ninja league id; "" = current challenge league
     "poeninja": {"enabled": True, "interval": 1800},
     "serial": {"port": ""},        # "" = detect the screen automatically
     # Game events from Client.txt. "media": an uploaded file id, "" = the built-in animation.

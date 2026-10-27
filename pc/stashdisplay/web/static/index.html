@@ -282,8 +282,6 @@
     <section class="panel">
       <h2 x-text="t('set.data')"></h2>
       <div class="grid2">
-        <label><span x-text="t('set.league')"></span>
-          <input type="text" x-model="draft.settings.league" :placeholder="t('set.league.auto')"></label>
         <label><span x-text="t('set.interval')"></span>
           <input type="number" min="60" max="3600" x-model.number="draft.settings.interval"></label>
         <label><span x-text="t('set.min_refresh')"></span>

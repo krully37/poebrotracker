@@ -62,7 +62,7 @@ A fourth example page, **League** (since league start, today, best hour, item pr
 - Add, remove, reorder, hide or duplicate any page, built-in ones included.
 - Edit a page's widgets with a **live preview that is exactly what the screen shows**.
 - Set each page's background: upload an image, GIF or video. The PC resizes, crops and converts it.
-- Configure league, poe.ninja items, intervals and the cookie in one place, with no hand-edited files.
+- Configure poe.ninja items, intervals and the cookie in one place, with no hand-edited files.
 
 **Widgets for v1:**
 - Stash total, div/h, sparkline, session gain, most valuable items, tab totals, divine price (the built-in pages are made from these).
@@ -102,7 +102,7 @@ Decided 2026-10-27.
 
 **Settings beyond pages**
 - WealthyExile cookie: pasted into a masked field, with a "Test" button. On Windows it is stored encrypted with DPAPI (Windows' per-user encryption), not as plain text. It is not read from the browser automatically (Chrome encrypts its cookies, and that would mean touching the browser's credential store).
-- League, intervals, poe.ninja items, and Start with Windows.
+- Intervals, poe.ninja items, and Start with Windows.
 
 **Backgrounds in this step**
 - Upload, crop and convert images, GIFs and videos. The preview shows a still frame. The animated preview comes with the firmware media step, once the real frame rate is known. The browser extracts a video's still frame, so the settings page itself needs no ffmpeg; ffmpeg only comes in with the MJPEG conversion.
@@ -137,6 +137,7 @@ Decided 2026-10-27.
 
 - **WealthyExile** (core): stash value, items and tabs. No documented API, so we reverse-engineer the site's own JSON requests. All of that lives in one adapter module, with a `--dump` mode for raw responses.
 - **Divine price**: worked out from WealthyExile if it gives totals in both chaos and divines, else the friends' pricer (later), else poe.ninja.
+- **League** (decided 2026-10-27): there is no league setting. The friend plays the current softcore trade league. Until WealthyExile is read (step 7), poe.ninja prices use the first league in poe.ninja's list, which is the current softcore trade one. After that, prices follow the league WealthyExile reports, so the two can never disagree, including in the first hours of a new league.
 - **poe.ninja**: official economy endpoints, used for the item-price widget and the divine price fallback. It sends a descriptive User-Agent, respects the cache and ETags, and polls at most every 30 min. Note: poe.ninja's docs ask desktop apps to proxy through their own backend. We accept that small deviation at this request rate.
 - **History**: a local file in `%APPDATA%\stashdisplay`, which survives restarts. It feeds div/h, the sparkline, session, league-start and day stats.
 - **XP/hour** (wanted, not scheduled yet): `Client.txt` only logs level-ups, not experience. GGG's official API returns each character's `experience` (`GET /character`, scope `account:characters`), and desktop apps may use it as a "public client" (OAuth with PKCE and a local redirect). This needs the app registered with GGG, and the friend logging in to his PoE account once to approve it. To be decided before step 7.

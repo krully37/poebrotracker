@@ -191,8 +191,6 @@
   "we.howto.warning": "Le cookie fonctionne comme un mot de passe pour votre compte WealthyExile : ne le partagez jamais. Si WealthyExile vous déconnecte, refaites ces étapes pour en coller un nouveau.",
 
   "set.data": "Données",
-  "set.league": "Ligue",
-  "set.league.auto": "Ligue challenge en cours",
   "set.interval": "Récupérer toutes les (secondes)",
   "set.min_refresh": "Rafraîchissement au toucher au plus toutes les (secondes)",
   "set.rate_window": "Gain par heure calculé sur (minutes)",
