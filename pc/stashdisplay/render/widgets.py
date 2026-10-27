@@ -15,7 +15,8 @@ from datetime import datetime
 from typing import Any
 
 from . import draw
-from .data import METRICS, RenderData, fmt_amount, fmt_duration, fmt_metric
+from . import i18n
+from .data import METRICS, RenderData, fmt_amount, fmt_chaos, fmt_duration, fmt_metric
 from .draw import Ctx
 from .fonts import BUNDLED, FALLBACK, NAME_FAMILY, TITLE_FAMILY, fit, font, text_size
 from .templates import Box
@@ -36,6 +37,10 @@ class Option:
     choices: list[str] = field(default_factory=list)
     minimum: int | None = None
     maximum: int | None = None
+    i18n: str | None = None  # text key whose translation replaces the default in other languages
+
+    def default_in(self, lang: str):
+        return i18n.t(self.i18n, lang) if self.i18n else self.default
 
 
 @dataclass
@@ -71,12 +76,12 @@ def _font_options(family: str = NUMBER_FAMILY, weight: int = 700, color: str = "
 
 # --- Titles: shown in the tooltip header, or above the content without one ---
 
-def slot_title(slot: dict) -> str:
+def slot_title(slot: dict, lang: str = "en") -> str:
     kind = slot["widget"]
     if kind == "value":
         if slot["label"] == "-":
             return ""
-        return slot["label"] or METRICS.get(slot["metric"], METRICS["total"]).label
+        return slot["label"] or METRICS.get(slot["metric"], METRICS["total"]).label_in(lang)
     if kind == "stack_value":
         return "" if slot["label"] == "-" else (slot["label"] or slot["name"])
     return slot.get("title", "")
@@ -96,16 +101,17 @@ PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 
 def placeholders(data: RenderData) -> dict[str, str]:
-    values = {k: fmt_metric(m.kind, data.metrics.get(k)) for k, m in METRICS.items()}
+    lang = data.lang
+    values = {k: fmt_metric(m.kind, data.metrics.get(k), lang) for k, m in METRICS.items()}
     now = datetime.fromtimestamp(data.now).astimezone()
     start = datetime.fromtimestamp(data.session_start).astimezone() if data.session_start else None
     values.update(
         league=data.league or "--",
         time=now.strftime("%H:%M"),
-        date=now.strftime("%a %d %b"),
+        date=i18n.short_date(now, lang),
         session_since=start.strftime("%H:%M") if start else "--",
-        session_duration=fmt_duration(data.now - data.session_start) if start else "--",
-        synced=fmt_duration(data.now - data.synced_at) if data.synced_at else "never",
+        session_duration=fmt_duration(data.now - data.session_start, lang) if start else "--",
+        synced=fmt_duration(data.now - data.synced_at, lang) if data.synced_at else i18n.t("never", lang),
     )
     return values
 
@@ -228,9 +234,9 @@ def amount_with_unit(ctx: Ctx, row: Box, right: float, value: float, f, unit: st
     if icon and draw.has_icon(ctx, unit):
         draw.item_icon(ctx, unit, right - size, row.y + (row.h - size) / 2, size)
         right -= size + 3
-        text = fmt_amount(value) if unit == "Divine Orb" else f"{value:,.0f}"
+        text = fmt_amount(value, ctx.data.lang) if unit == "Divine Orb" else fmt_chaos(value, ctx.data.lang)
     else:
-        text = fmt_amount(value) if unit == "Divine Orb" else f"{value:,.0f}c"
+        text = fmt_amount(value, ctx.data.lang) if unit == "Divine Orb" else fmt_chaos(value, ctx.data.lang) + "c"
     w = text_size(text, f)[0]
     draw.text_in(ctx, Box(right - w, row.y, w, row.h), text, f, WHITE, "right")
     return right - w
@@ -254,15 +260,15 @@ def empty(ctx: Ctx, box: Box, message: str) -> None:
 ])
 def render_value(ctx: Ctx, box: Box, o: dict) -> None:
     metric = METRICS.get(o["metric"], METRICS["total"])
-    label = "" if o["label"] == "-" else (o["label"] or metric.label)
+    label = "" if o["label"] == "-" else (o["label"] or metric.label_in(ctx.data.lang))
     value = ctx.data.metrics.get(metric.id)
-    main = fmt_metric(metric.kind, value)
+    main = fmt_metric(metric.kind, value, ctx.data.lang)
     icon = None
     if o["icon"]:
         if metric.kind != "chaos":
             icon = "Divine Orb"
         elif draw.has_icon(ctx, "Chaos Orb") and value is not None:
-            icon, main = "Chaos Orb", f"{value:,.0f}"  # the icon replaces the "c"
+            icon, main = "Chaos Orb", fmt_chaos(value, ctx.data.lang)  # the icon replaces the "c"
     sub = fill_placeholders(o["sub"], ctx.data) if o["sub"] else ""
     value_block(
         ctx, box, label=label, main=main, sub=sub,
@@ -283,12 +289,12 @@ def render_sparkline(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
     values = ctx.data.session_series if o["series"] == "session" else ctx.data.total_series
     if len(values) < 2:
-        empty(ctx, box, "Collecting data…")
+        empty(ctx, box, i18n.t("empty.collecting", ctx.data.lang))
         return
     label_w = 0
     if o["range"]:
         lf = font(NUMBER_FAMILY, 11, 500)
-        hi, lo = fmt_amount(max(values)), fmt_amount(min(values))
+        hi, lo = fmt_amount(max(values), ctx.data.lang), fmt_amount(min(values), ctx.data.lang)
         label_w = max(text_size(hi, lf)[0], text_size(lo, lf)[0]) + 6
         draw.text_in(ctx, Box(box.x + box.w - label_w + 6, box.y, label_w, 12), hi, lf, MUTED, "left", "top")
         draw.text_in(ctx, Box(box.x + box.w - label_w + 6, box.y + box.h - 12, label_w, 12), lo, lf, MUTED, "left", "bottom")
@@ -305,7 +311,7 @@ def render_sparkline(ctx: Ctx, box: Box, o: dict) -> None:
 
 
 @widget("top_items", "Top stacks", "The most valuable item stacks.", [
-    Option("title", "text", "Top stacks", "Title"),
+    Option("title", "text", "Top stacks", "Title", i18n="title.top_items"),
     Option("count", "int", 8, "Rows", minimum=1, maximum=12),
     Option("quantity", "bool", True, "Show quantity"),
     Option("icons", "bool", True, "Item icons"),
@@ -315,14 +321,14 @@ def render_top_items(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
     items = sorted(ctx.data.snapshot.items, key=lambda i: i.value, reverse=True) if ctx.data.snapshot else []
     if not items:
-        empty(ctx, box, "No data yet")
+        empty(ctx, box, i18n.t("empty.no_data", ctx.data.lang))
         return
     for row, item in zip(rows(box, o["count"]), items):
         nf, vf, qf = row_fonts(row)
         left = row_icon(ctx, item.name, row, row.x) if o["icons"] else row.x
         name_right = amount_with_unit(ctx, row, row.x + row.w, item.value, vf, icon=o["unit_icons"]) - 8
         if o["quantity"]:
-            qty = f"x{item.quantity:,}"
+            qty = "x" + i18n.number(f"{item.quantity:,}", ctx.data.lang)
             qw = text_size(qty, qf)[0]
             draw.text_in(ctx, Box(name_right - qw, row.y, qw, row.h), qty, qf, MUTED, "right")
             name_right -= qw + 6
@@ -331,7 +337,7 @@ def render_top_items(ctx: Ctx, box: Box, o: dict) -> None:
 
 
 @widget("tab_totals", "Stash tabs", "Value of each stash tab, with bars.", [
-    Option("title", "text", "Tabs", "Title"),
+    Option("title", "text", "Tabs", "Title", i18n="title.tab_totals"),
     Option("count", "int", 8, "Rows", minimum=1, maximum=12),
     Option("bars", "bool", True, "Show bars"),
     Option("unit_icons", "bool", False, "Divine icon after each value"),
@@ -340,7 +346,7 @@ def render_tab_totals(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
     tabs = sorted(ctx.data.tabs(), key=lambda t: t.value, reverse=True)
     if not tabs:
-        empty(ctx, box, "No data yet")
+        empty(ctx, box, i18n.t("empty.no_data", ctx.data.lang))
         return
     top = tabs[0].value or 1.0
     for row, tab in zip(rows(box, o["count"]), tabs):
@@ -356,7 +362,7 @@ def render_tab_totals(ctx: Ctx, box: Box, o: dict) -> None:
 
 
 @widget("item_price", "Item prices", "Prices of chosen items from poe.ninja.", [
-    Option("title", "text", "Prices", "Title"),
+    Option("title", "text", "Prices", "Title", i18n="title.item_price"),
     Option("items", "items", ["Mirror of Kalandra"], "Items"),
     Option("unit", "choice", "div", "Unit", choices=["div", "chaos"]),
     Option("change", "bool", True, "Show 7-day change"),
@@ -366,7 +372,7 @@ def render_item_price(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
     names = o["items"] or []
     if not names:
-        empty(ctx, box, "No items chosen")
+        empty(ctx, box, i18n.t("empty.no_items", ctx.data.lang))
         return
     for row, name in zip(rows(box, max(len(names), 3)), names):
         nf, vf, qf = row_fonts(row, scale=0.5, largest=19)
@@ -374,7 +380,7 @@ def render_item_price(ctx: Ctx, box: Box, o: dict) -> None:
         price = ctx.data.item_prices.get(name)
         right = row.x + row.w
         if price is not None and o["change"] and price.change is not None:
-            ct = f"{price.change:+.0f}%"
+            ct = i18n.percent(price.change, ctx.data.lang)
             cw = text_size(ct, qf)[0]
             draw.text_in(ctx, Box(right - cw, row.y, cw, row.h), ct, qf, signed_color(price.change), "right")
             right -= cw + 8
@@ -408,10 +414,10 @@ def render_stack_value(ctx: Ctx, box: Box, o: dict) -> None:
     elif ctx.data.snapshot:
         item = next((i for i in ctx.data.snapshot.items if i.name.lower() == wanted), None)
         if item:
-            value, sub = item.value, f"x{item.quantity:,}"
+            value, sub = item.value, "x" + i18n.number(f"{item.quantity:,}", ctx.data.lang)
     value_block(
         ctx, box, label="" if o["label"] == "-" else (o["label"] or o["name"]),
-        main=fmt_amount(value) if value is not None else "--",
+        main=fmt_amount(value, ctx.data.lang) if value is not None else "--",
         sub=sub, color=color_for(o["color"], ctx.data, None), sub_color=MUTED,
         icon="Divine Orb" if o["icon"] else None, family=o["font"], weight=o["weight"], align=o["align"],
         size=o["size"],
@@ -448,7 +454,7 @@ def render_clock(ctx: Ctx, box: Box, o: dict) -> None:
     now = datetime.fromtimestamp(ctx.data.now).astimezone()
     main = now.strftime("%H:%M") if o["hours"] == "24h" else now.strftime("%I:%M %p").lstrip("0")
     value_block(
-        ctx, box, label="", main=main, sub=now.strftime("%A %d %B") if o["date"] else "",
+        ctx, box, label="", main=main, sub=i18n.long_date(now, ctx.data.lang) if o["date"] else "",
         color=color_for(o["color"], ctx.data, None), sub_color=MUTED, icon=None,
         family=o["font"], weight=o["weight"], align=o["align"], size=o["size"],
     )

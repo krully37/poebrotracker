@@ -173,3 +173,25 @@ def test_media_kinds_and_rejects(tmp_path):
         media.add("notes.txt", b"hello")
     with pytest.raises(MediaError):
         media.get("../settings")
+
+
+def test_preview_and_preset_follow_the_language(client):
+    page = pagelib.preset()[0]
+    en = client.post("/api/preview", json={"page": page, "lang": "en"}, headers=WRITE).data
+    fr = client.post("/api/preview", json={"page": page, "lang": "fr"}, headers=WRITE).data
+    assert en != fr
+    assert client.get("/api/preset?lang=fr").get_json()["pages"][3]["name"] == "Ligue"
+    schema = client.get("/api/state").get_json()["schema"]
+    total = next(m for m in schema["metrics"] if m["id"] == "total")
+    assert total["labels"]["fr"] == "Valeur de la réserve"
+    top = next(w for w in schema["widgets"] if w["id"] == "top_items")
+    assert next(o for o in top["options"] if o["key"] == "title")["defaults"]["fr"] == "Meilleurs ensembles"
+
+
+def test_first_start_uses_the_system_language(tmp_path, monkeypatch):
+    import stashdisplay.settings as settings_mod
+
+    monkeypatch.setattr(settings_mod, "system_language", lambda: "fr")
+    store = Store.load(tmp_path / "settings.json")
+    assert store.settings["language"] == "fr"
+    assert store.pages[3]["name"] == "Ligue"

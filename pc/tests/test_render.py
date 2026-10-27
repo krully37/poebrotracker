@@ -93,3 +93,39 @@ def test_formatting():
     assert renderdata.fmt_duration(30) == "now"
     assert renderdata.fmt_duration(130) == "2m"
     assert renderdata.fmt_duration(2 * 3600 + 300) == "2h05"
+
+
+def test_french_numbers_durations_and_dates():
+    from datetime import datetime
+
+    from stashdisplay.render import i18n
+
+    nb = i18n.NBSP
+    assert renderdata.fmt_metric("div", 239.94, "fr") == "239,9"
+    assert renderdata.fmt_metric("rate", 3.8, "fr") == "+3,80/h"
+    assert renderdata.fmt_metric("chaos", 1215.4, "fr") == f"1{nb}215c"
+    assert renderdata.fmt_metric("div", 12345, "fr") == "12,3k"
+    assert renderdata.fmt_duration(130, "fr") == "2 min"
+    assert renderdata.fmt_duration(3 * 86400, "fr") == "3 j"
+    assert i18n.percent(-3, "fr") == f"-3{nb}%" and i18n.percent(7.5, "en") == "+8%"
+    tuesday = datetime(2026, 10, 27, 17, 20)
+    assert i18n.long_date(tuesday, "fr") == "mardi 27 octobre"
+    assert i18n.short_date(tuesday, "en") == "Tue 27 Oct"
+
+
+def test_every_screen_text_has_both_languages_and_a_source():
+    from stashdisplay.render import i18n
+
+    for key, (en, fr, source) in i18n.TEXT.items():
+        assert en and fr, key
+        assert set(source.split("+")) <= {i18n.GAME, i18n.TOOLS, i18n.STD, i18n.DRAFT}, key
+
+
+def test_french_preset_and_render():
+    pages = pagelib.preset("fr")
+    assert [p["name"] for p in pages][-1] == "Ligue"
+    assert pages[0]["slots"]["main"]["label"] == ""  # follows the metric name, in any language
+    data = demo_render_data(1_700_000_000, seed=7, lang="fr")
+    assert data.lang == "fr"
+    for i, page in enumerate(pages):
+        assert renderer.preview(page, data, i, len(pages)).size == (480, 320)

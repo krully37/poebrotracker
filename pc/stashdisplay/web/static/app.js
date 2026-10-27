@@ -80,6 +80,7 @@ document.addEventListener("alpine:init", () => {
       this.$watch("draft.pages", () => this.schedulePreview(), { deep: true });
       this.$watch("pageIndex", () => this.schedulePreview());
       this.$watch("forceDemo", () => this.schedulePreview());
+      this.$watch("lang", () => this.schedulePreview());  // the screen's text follows the language
       setInterval(() => this.schedulePreview(), PREVIEW_REFRESH_MS);  // clock and "synced" text
       window.addEventListener("beforeunload", (e) => { if (this.dirty) e.preventDefault(); });
       this.schedulePreview();
@@ -118,7 +119,7 @@ document.addEventListener("alpine:init", () => {
     choiceLabel(opt, value) {
       if (opt.kind === "metric") {
         const m = this.schema.metrics.find((x) => x.id === value);
-        return this.tr("metric." + value, m ? m.label : value);
+        return m ? (m.labels[this.lang] ?? m.label) : value;  // same words as on the screen
       }
       return this.tr("choice." + value, value);
     },
@@ -159,7 +160,7 @@ document.addEventListener("alpine:init", () => {
       }
       const def = this.widgetDef(id);
       const slot = { widget: id, frame: def.frame };
-      for (const opt of def.options) slot[opt.key] = clone(opt.default);
+      for (const opt of def.options) slot[opt.key] = clone(opt.defaults?.[this.lang] ?? opt.default);
       this.page.slots[this.selectedSlot] = slot;
     },
 
@@ -224,7 +225,7 @@ document.addEventListener("alpine:init", () => {
 
     async resetPreset() {
       if (!confirm(this.t("pages.reset.confirm"))) return;
-      const { pages } = await api("/api/preset").then((r) => r.json());
+      const { pages } = await api("/api/preset?lang=" + this.lang).then((r) => r.json());
       this.draft.pages = pages;
       this.selectPage(0);
     },
@@ -361,7 +362,9 @@ document.addEventListener("alpine:init", () => {
         const res = await fetch("/api/preview", {
           method: "POST", signal: abort.signal, credentials: "same-origin",
           headers: { ...WRITE_HEADERS, "Content-Type": "application/json" },
-          body: JSON.stringify({ page: this.page, index, count: Math.max(1, visible.length), demo: this.forceDemo }),
+          body: JSON.stringify({
+            page: this.page, index, count: Math.max(1, visible.length), demo: this.forceDemo, lang: this.lang,
+          }),
         });
         if (!res.ok) return;
         this.isDemo = res.headers.get("X-Demo-Data") === "1";
