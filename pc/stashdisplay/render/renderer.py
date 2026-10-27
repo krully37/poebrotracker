@@ -15,7 +15,6 @@ from PIL import Image
 from ..media import compose_background
 
 from . import draw, frames
-from . import i18n
 from .data import RenderData, fmt_duration
 from .draw import Ctx
 from .fonts import NAME_FAMILY, TITLE_FAMILY, font, text_size
@@ -42,15 +41,14 @@ def header(ctx: Ctx, page: dict) -> None:
         right -= cw + 12
     if opts["synced"]:
         sf = font(NAME_FAMILY, 13, 400)
-        data, lang = ctx.data, ctx.data.lang
+        data = ctx.data
         if data.synced_at is None:
-            label, color = i18n.t("header.waiting", lang), LABEL
+            label, color = "waiting for data", LABEL
         elif data.stale:
-            label, color = i18n.t("header.stale", lang, ago=fmt_duration(data.now - data.synced_at, lang)), STALE
-        elif data.now - data.synced_at < 60:
-            label, color = i18n.t("header.synced_now", lang), LABEL
+            label, color = f"stale · {fmt_duration(data.now - data.synced_at)} ago", STALE
         else:
-            label, color = i18n.t("header.synced", lang, ago=fmt_duration(data.now - data.synced_at, lang)), LABEL
+            ago = fmt_duration(data.now - data.synced_at)
+            label, color = ("synced just now" if ago == "now" else f"synced {ago} ago"), LABEL
         sw = text_size(label, sf)[0]
         draw.text_in(ctx, Box(right - sw, box.y + 3, sw, box.h - 8), label, sf, color, "right")
         right -= sw + 12
@@ -71,7 +69,7 @@ def overlay(page: dict, data: RenderData, show_empty_slots: bool = False) -> Ima
             continue
         options = slot
         if slot["frame"] == "tooltip":
-            box = frames.tooltip(ctx, box, slot_title(slot, ctx.data.lang))
+            box = frames.tooltip(ctx, box, slot_title(slot))
             options = without_title(slot)
         elif slot["frame"] == "plain":
             box = frames.tooltip(ctx, box)

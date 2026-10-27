@@ -16,7 +16,7 @@ from . import paths
 from .assets import AssetCache
 from .media import MediaStore
 from .render import data as renderdata
-from .render import fonts, i18n, renderer
+from .render import fonts, renderer
 from .settings import Store
 
 log = logging.getLogger(__name__)
@@ -43,20 +43,18 @@ class App:
         fonts.register_fontin(assets.fontin())
         return app
 
-    def render_data(self, force_demo: bool = False, lang: str | None = None) -> tuple[renderdata.RenderData, bool]:
-        """Data for a render, and whether it is demo data. `lang` defaults to the saved language."""
+    def render_data(self, force_demo: bool = False) -> tuple[renderdata.RenderData, bool]:
+        """Data for a render, and whether it is demo data."""
         now = time.time()
-        lang = i18n.lang_or_default(lang or self.store.settings["language"])
         if self.live_data is not None and not force_demo:
-            return dataclasses.replace(self.live_data, now=now, lang=lang), False
+            return dataclasses.replace(self.live_data, now=now), False
         if self._demo is None or now - self._demo[0] > DEMO_MAX_AGE:
             from .cli import demo_render_data  # import here: cli imports this module
             self._demo = (now, demo_render_data(now, seed=7, assets=self.assets))
-        return dataclasses.replace(self._demo[1], now=now, synced_at=now - 130, lang=lang), True
+        return dataclasses.replace(self._demo[1], now=now, synced_at=now - 130), True
 
-    def preview_png(self, page: dict, index: int, count: int, force_demo: bool = False,
-                    lang: str | None = None) -> tuple[bytes, bool]:
-        data, is_demo = self.render_data(force_demo, lang)
+    def preview_png(self, page: dict, index: int, count: int, force_demo: bool = False) -> tuple[bytes, bool]:
+        data, is_demo = self.render_data(force_demo)
         with self._render_lock:
             img = renderer.preview(page, data, index, count, still_for=self.media.still_path)
         buf = io.BytesIO()

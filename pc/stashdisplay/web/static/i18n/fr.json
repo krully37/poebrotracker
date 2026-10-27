@@ -149,6 +149,13 @@
   "opt.hours": "Format",
   "opt.date": "Afficher la date",
 
+  "metric.total": "Valeur de la réserve",
+  "metric.rate": "Par heure",
+  "metric.session": "Session",
+  "metric.today": "Aujourd'hui",
+  "metric.best_hour": "Meilleure heure du jour",
+  "metric.league_gain": "Depuis le début de la ligue",
+  "metric.div_price": "Prix de l'Orbe divin",
 
   "choice.left": "Gauche",
   "choice.center": "Centre",

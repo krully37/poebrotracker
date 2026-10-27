@@ -16,7 +16,6 @@ A page is plain JSON so it can be saved in settings.json as is:
 import copy
 import uuid
 
-from .render.i18n import t
 from .render.templates import TEMPLATES
 from .render.theme import BACKGROUND
 from .render.widgets import FRAMES, WIDGETS
@@ -78,47 +77,42 @@ def visible(pages: list[dict]) -> list[dict]:
     return [p for p in pages if not p["hidden"]]
 
 
-def preset(lang: str = "en") -> list[dict]:
-    """The pages a fresh install starts with: the brief's three pages plus one example custom page.
-
-    Written in `lang`. Labels that would repeat the metric's name are left empty, so
-    they follow the language even after a switch.
-    """
+def preset() -> list[dict]:
+    """The pages a fresh install starts with: the brief's three pages plus one example custom page."""
     pages = [
         {
-            "id": "total", "name": t("preset.page.total", lang), "template": "hero",
+            "id": "total", "name": "Total", "template": "hero",
             "slots": {
-                "main": {"widget": "value", "metric": "total", "label": ""},
-                "side": {"widget": "value", "metric": "rate", "label": "", "icon": False, "align": "right"},
+                "main": {"widget": "value", "metric": "total", "label": "Stash value"},
+                "side": {"widget": "value", "metric": "rate", "label": "Per hour", "icon": False, "align": "right"},
                 "chart": {"widget": "sparkline", "series": "total"},
-                "footer": {"widget": "text", "text": t("preset.total_footer", lang), "color": "#8A8F98"},
+                "footer": {"widget": "text", "text": "Session {session}  ·  Today {today}  ·  {league}", "color": "#8A8F98"},
             },
         },
         {
-            "id": "top", "name": t("preset.page.top", lang), "template": "split",
+            "id": "top", "name": "Top", "template": "split",
             "slots": {
-                "col1": {"widget": "top_items", "title": t("title.top_items", lang), "count": 8},
-                "col2": {"widget": "tab_totals", "title": t("title.tab_totals", lang), "count": 8},
+                "col1": {"widget": "top_items", "title": "Top stacks", "count": 8},
+                "col2": {"widget": "tab_totals", "title": "Tabs", "count": 8},
             },
         },
         {
-            "id": "session", "name": t("preset.page.session", lang), "template": "hero",
+            "id": "session", "name": "Session", "template": "hero",
             "slots": {
-                "main": {"widget": "value", "metric": "session", "label": t("preset.session_gain", lang),
-                         "sub": t("preset.session_sub", lang), "color": "auto"},
-                "side": {"widget": "value", "metric": "div_price", "label": t("preset.divine", lang), "align": "right"},
+                "main": {"widget": "value", "metric": "session", "label": "Session gain",
+                         "sub": "since {session_since} ({session_duration})", "color": "auto"},
+                "side": {"widget": "value", "metric": "div_price", "label": "Divine", "align": "right"},
                 "chart": {"widget": "sparkline", "series": "session"},
-                "footer": {"widget": "text", "text": t("preset.session_footer", lang), "color": "#8A8F98"},
+                "footer": {"widget": "text", "text": "Best hour today {best_hour}  ·  Rate {rate}", "color": "#8A8F98"},
             },
         },
         {
-            "id": "league", "name": t("preset.page.league", lang), "template": "grid4",
+            "id": "league", "name": "League", "template": "grid4",
             "slots": {
-                "top1": {"widget": "value", "metric": "league_gain", "label": "", "color": "auto"},
-                "top2": {"widget": "value", "metric": "today", "label": "", "color": "auto"},
-                "bottom1": {"widget": "value", "metric": "best_hour", "label": t("preset.best_hour", lang), "color": "auto"},
-                "bottom2": {"widget": "item_price", "title": t("title.item_price", lang),
-                            "items": ["Mirror of Kalandra", "Mageblood", "Headhunter"]},
+                "top1": {"widget": "value", "metric": "league_gain", "label": "Since league start", "color": "auto"},
+                "top2": {"widget": "value", "metric": "today", "label": "Today", "color": "auto"},
+                "bottom1": {"widget": "value", "metric": "best_hour", "label": "Best hour", "color": "auto"},
+                "bottom2": {"widget": "item_price", "title": "Prices", "items": ["Mirror of Kalandra", "Mageblood", "Headhunter"]},
             },
         },
     ]

@@ -5,9 +5,7 @@ on load and on save, so a hand-edited or old file never breaks the app.
 """
 
 import copy
-import ctypes
 import json
-import locale
 import os
 import secrets
 import sys
@@ -16,7 +14,8 @@ from pathlib import Path
 
 from . import pages as pagelib
 from . import vault
-from .render.i18n import LANGUAGES
+
+LANGUAGES = ["en", "fr"]
 
 DEFAULTS: dict = {
     "language": "en",
@@ -60,18 +59,6 @@ def _merge(defaults: dict, given: dict) -> dict:
     return out
 
 
-def system_language() -> str:
-    """The PC's display language if we have it ("fr" on a French Windows), else English."""
-    try:
-        if sys.platform == "win32":
-            # Low 10 bits of the LANGID are the primary language; 0x0C is French.
-            return "fr" if ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF == 0x0C else "en"
-        code = (locale.getlocale()[0] or os.environ.get("LANG", "")).lower()
-    except (AttributeError, OSError, ValueError):
-        return "en"
-    return "fr" if code.startswith("fr") else "en"
-
-
 def normalize_settings(given: dict) -> dict:
     s = _merge(DEFAULTS, given or {})
     for path, lo, hi in LIMITS:
@@ -95,17 +82,14 @@ class Store:
     @classmethod
     def load(cls, path: Path) -> "Store":
         if not path.exists():
-            # First start: speak the PC's language, preset pages included.
-            lang = system_language()
-            store = cls(path=path, settings=normalize_settings({"language": lang}), pages=pagelib.preset(lang))
+            store = cls(path=path)
             store.save()
             return store
         data = json.loads(path.read_text(encoding="utf-8"))
-        settings = normalize_settings(data.get("settings", {}))
-        pages = [pagelib.normalize_page(p) for p in data.get("pages", [])] or pagelib.preset(settings["language"])
+        pages = [pagelib.normalize_page(p) for p in data.get("pages", [])] or pagelib.preset()
         return cls(
             path=path,
-            settings=settings,
+            settings=normalize_settings(data.get("settings", {})),
             pages=pages,
             cookie=vault.unseal(data.get("cookie")),
             token=data.get("token") or secrets.token_urlsafe(24),

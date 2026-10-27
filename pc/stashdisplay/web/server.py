@@ -20,7 +20,6 @@ from .. import pages as pagelib
 from ..app import App
 from ..media import MediaError
 from ..render.data import METRICS
-from ..render import i18n
 from ..render.fonts import BUNDLED, FALLBACK
 from ..render.templates import HEADER_BOX, TEMPLATES
 from ..render.theme import HEIGHT, WIDTH
@@ -47,12 +46,10 @@ def schema() -> dict:
         ],
         "widgets": [
             {"id": w.id, "name": w.name, "description": w.description, "frame": w.frame,
-             "options": [{**o.__dict__, "defaults": {lang: o.default_in(lang) for lang in LANGUAGES}}
-                         for o in w.options]}
+             "options": [o.__dict__ for o in w.options]}
             for w in WIDGETS.values()
         ],
-        "metrics": [{"id": m.id, "label": m.label, "labels": i18n.both("metric." + m.id), "kind": m.kind}
-                    for m in METRICS.values()],
+        "metrics": [{"id": m.id, "label": m.label, "kind": m.kind} for m in METRICS.values()],
         "fonts": [*BUNDLED, *FALLBACK],
         "frames": FRAMES,
         "background_kinds": pagelib.BACKGROUND_KINDS,
@@ -140,7 +137,7 @@ def create_app(app: App) -> Flask:
 
     @web.get("/api/preset")
     def preset():
-        return jsonify({"pages": pagelib.preset(i18n.lang_or_default(request.args.get("lang")))})
+        return jsonify({"pages": pagelib.preset()})
 
     # --- Preview -------------------------------------------------------------------
 
@@ -149,7 +146,7 @@ def create_app(app: App) -> Flask:
         body = request.get_json(force=True) or {}
         page = pagelib.normalize_page(body.get("page") or {})
         png, is_demo = app.preview_png(page, int(body.get("index", 0)), int(body.get("count", 1)),
-                                       force_demo=bool(body.get("demo")), lang=body.get("lang"))
+                                       force_demo=bool(body.get("demo")))
         resp = Response(png, mimetype="image/png")
         resp.headers["X-Demo-Data"] = "1" if is_demo else "0"
         return resp

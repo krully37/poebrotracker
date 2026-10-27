@@ -7,7 +7,6 @@ from pathlib import Path
 from .. import stats
 from ..history import History
 from ..sources.base import Snapshot, Tab
-from . import i18n
 
 STALE_AFTER = 15 * 60
 
@@ -22,11 +21,8 @@ class ItemPrice:
 @dataclass
 class Metric:
     id: str
-    label: str  # English; label_in() gives other languages
+    label: str
     kind: str  # "div" (amount), "signed" (gain), "rate" (gain per hour), "chaos"
-
-    def label_in(self, lang: str) -> str:
-        return i18n.t("metric." + self.id, lang)
 
 
 METRICS: dict[str, Metric] = {
@@ -56,7 +52,6 @@ class RenderData:
     item_prices: dict[str, ItemPrice] = field(default_factory=dict)
     # Item name -> local icon file (AssetCache.icon). None renders without game icons.
     icon: Callable[[str], Path | None] | None = None
-    lang: str = "en"  # language of the text drawn on the screen
 
     @property
     def stale(self) -> bool:
@@ -83,7 +78,6 @@ def build(
     spark_points: int = 48,
     rate_window: float = 3600,
     icon: Callable[[str], Path | None] | None = None,
-    lang: str = "en",
 ) -> RenderData:
     pts = history.points
     total = snapshot.total if snapshot else (pts[-1][1] if pts else None)
@@ -111,52 +105,44 @@ def build(
         session_start=history.session_start,
         item_prices=item_prices or {},
         icon=icon,
-        lang=i18n.lang_or_default(lang),
     )
 
 
 # --- Formatting -------------------------------------------------------------
 
-def fmt_amount(v: float, lang: str = "en") -> str:
+def fmt_amount(v: float) -> str:
     a = abs(v)
     if a >= 1_000_000:
-        text = f"{v / 1_000_000:.1f}M"
-    elif a >= 10_000:
-        text = f"{v / 1000:.1f}k"
-    elif a >= 1000:
-        text = f"{v:,.0f}"
-    elif a >= 10:
-        text = f"{v:.1f}"
-    else:
-        text = f"{v:.2f}"
-    return i18n.number(text, lang)
+        return f"{v / 1_000_000:.1f}M"
+    if a >= 10_000:
+        return f"{v / 1000:.1f}k"
+    if a >= 1000:
+        return f"{v:,.0f}"
+    if a >= 10:
+        return f"{v:.1f}"
+    return f"{v:.2f}"
 
 
-def fmt_chaos(v: float, lang: str = "en") -> str:
-    """Whole chaos with thousands separators, no unit: "1,180" / "1 180"."""
-    return i18n.number(f"{v:,.0f}", lang)
-
-
-def fmt_metric(kind: str, v: float | None, lang: str = "en") -> str:
+def fmt_metric(kind: str, v: float | None) -> str:
     if v is None:
         return "--"
     if kind == "chaos":
-        return fmt_chaos(v, lang) + "c"
+        return f"{v:,.0f}c"
     if kind in ("signed", "rate"):
         sign = "+" if v >= 0 else "-"
-        text = sign + fmt_amount(abs(v), lang)
+        text = sign + fmt_amount(abs(v))
         return text + "/h" if kind == "rate" else text
-    return fmt_amount(v, lang)
+    return fmt_amount(v)
 
 
-def fmt_duration(seconds: float, lang: str = "en") -> str:
+def fmt_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
     if seconds < 60:
-        return i18n.t("duration.now", lang)
+        return "now"
     minutes = seconds // 60
     if minutes < 60:
-        return i18n.t("duration.minutes", lang, n=minutes)
+        return f"{minutes}m"
     hours, minutes = divmod(minutes, 60)
     if hours < 48:
         return f"{hours}h{minutes:02d}"
-    return i18n.t("duration.days", lang, n=hours // 24)
+    return f"{hours // 24}d"

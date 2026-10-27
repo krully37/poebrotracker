@@ -28,8 +28,7 @@ from .render.data import ItemPrice
 from .sources.demo import DemoSource
 
 
-def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | None = None,
-                     lang: str = "en") -> renderdata.RenderData:
+def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | None = None) -> renderdata.RenderData:
     """About 6 hours of fake history, a session that started 2 hours ago, and fake poe.ninja prices."""
     source = DemoSource(seed=seed)
     source.sim_time = now
@@ -47,8 +46,7 @@ def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | N
         "Headhunter": ItemPrice(chaos=round(last.div_price * 34.5), div=34.5, change=-12.0),
     }
     return renderdata.build(
-        history, last, now=now, synced_at=now - 130, item_prices=prices, icon=assets.icon if assets else None,
-        lang=lang,
+        history, last, now=now, synced_at=now - 130, item_prices=prices, icon=assets.icon if assets else None
     )
 
 
@@ -57,8 +55,8 @@ def cmd_preview(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     assets = AssetCache(offline=args.offline)
     fonts.register_fontin(assets.fontin())
-    data = demo_render_data(time.time(), seed=args.seed, assets=assets, lang=args.lang)
-    shown = pagelib.visible(pagelib.preset(args.lang))
+    data = demo_render_data(time.time(), seed=args.seed, assets=assets)
+    shown = pagelib.visible(pagelib.preset())
     images, labels = [], []
     for i, page in enumerate(shown):
         img = renderer.preview(page, data, i, len(shown))
@@ -128,7 +126,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--scale", type=int, default=1, help="also write N-times enlarged copies")
     p.add_argument("--seed", type=int, default=7, help="demo data seed, for repeatable images")
     p.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
-    p.add_argument("--lang", choices=["en", "fr"], default="en", help="language of the text on the screen")
     p.set_defaults(func=cmd_preview)
     args = parser.parse_args(argv)
     return args.func(args)
