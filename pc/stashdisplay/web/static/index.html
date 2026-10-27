@@ -257,7 +257,17 @@
   <!-- Settings tab -->
   <main class="settings-tab" x-show="tab === 'settings'">
     <section class="panel">
-      <h2>WealthyExile</h2>
+      <h2>WealthyExile
+        <span class="help" tabindex="0" :aria-label="t('we.howto.title')">?
+          <span class="help-box" role="tooltip">
+            <strong x-text="t('we.howto.title')"></strong>
+            <ol>
+              <template x-for="n in [1, 2, 3, 4, 5, 6]" :key="n"><li x-text="t('we.howto.' + n)"></li></template>
+            </ol>
+            <span x-text="t('we.howto.warning')"></span>
+          </span>
+        </span>
+      </h2>
       <p class="hint" x-text="t('we.hint')"></p>
       <div class="cookie-row">
         <input type="password" x-model="cookieInput" :placeholder="hasCookie ? t('we.cookie.saved') : t('we.cookie.paste')" autocomplete="off">

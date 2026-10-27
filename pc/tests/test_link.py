@@ -245,7 +245,7 @@ def test_touch_zones_only_on_resettable_values():
     by_id = {pg["id"]: pagelib.touch_zones(pg) for pg in pagelib.preset()}
     assert [z["action"] for z in by_id["total"]] == ["reset_rate"]
     assert sorted(z["action"] for z in by_id["session"]) == ["reset_session", "reset_session"]
-    assert by_id["league"] == []
+    assert by_id["top"] == []
 
 
 def test_backgrounds_become_screen_files(tmp_path):

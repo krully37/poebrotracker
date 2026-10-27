@@ -26,7 +26,7 @@ def no_data():
 
 def test_preset_pages_render(demo):
     shown = pagelib.visible(pagelib.preset())
-    assert [p["id"] for p in shown] == ["total", "top", "session", "league"]
+    assert [p["id"] for p in shown] == ["total", "top", "session"]
     for i, page in enumerate(shown):
         img = renderer.preview(page, demo, i, len(shown))
         assert img.size == (WIDTH, HEIGHT)

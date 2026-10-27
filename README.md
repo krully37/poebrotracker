@@ -1,6 +1,6 @@
 # poebrotracker
 
-A 3.5" USB touchscreen that sits next to the keyboard and shows the value of a Path of Exile 1 stash, as computed by WealthyExile: total in divines, divines/hour, session gain, top stacks, plus fully custom pages built in a local settings page.
+A 3.5" USB touchscreen that sits next to the keyboard and shows the value of a Path of Exile 1 stash, as computed by WealthyExile: total in divines, divines/hour, session gain, most valuable items, plus fully custom pages built in a local settings page.
 
 **Status:** scoping done, building in progress. Hardware not received yet.
 

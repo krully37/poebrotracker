@@ -97,7 +97,7 @@ def touch_zones(page: dict) -> list[dict]:
 
 
 def preset() -> list[dict]:
-    """The pages a fresh install starts with: the brief's three pages plus one example custom page."""
+    """The pages a fresh install starts with: the brief's three pages."""
     pages = [
         {
             "id": "total", "name": "Total", "template": "hero",
@@ -111,7 +111,7 @@ def preset() -> list[dict]:
         {
             "id": "top", "name": "Top", "template": "split",
             "slots": {
-                "col1": {"widget": "top_items", "title": "Top stacks", "count": 8},
+                "col1": {"widget": "top_items", "title": "Most valuable", "count": 8},
                 "col2": {"widget": "tab_totals", "title": "Tabs", "count": 8},
             },
         },
@@ -123,15 +123,6 @@ def preset() -> list[dict]:
                 "side": {"widget": "value", "metric": "div_price", "label": "Divine", "align": "right"},
                 "chart": {"widget": "sparkline", "series": "session"},
                 "footer": {"widget": "text", "text": "Best hour today {best_hour}  ·  Rate {rate}", "color": "#8A8F98"},
-            },
-        },
-        {
-            "id": "league", "name": "League", "template": "grid4",
-            "slots": {
-                "top1": {"widget": "value", "metric": "league_gain", "label": "Since league start", "color": "auto"},
-                "top2": {"widget": "value", "metric": "today", "label": "Today", "color": "auto"},
-                "bottom1": {"widget": "value", "metric": "best_hour", "label": "Best hour", "color": "auto"},
-                "bottom2": {"widget": "item_price", "title": "Prices", "items": ["Mirror of Kalandra", "Mageblood", "Headhunter"]},
             },
         },
     ]

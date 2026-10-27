@@ -304,8 +304,8 @@ def render_sparkline(ctx: Ctx, box: Box, o: dict) -> None:
     draw.paint(ctx, o["color"], lambda d: d.ellipse((lx - 3.5 * k, ly - 3.5 * k, lx + 3.5 * k, ly + 3.5 * k), fill=255), smooth=True)
 
 
-@widget("top_items", "Top stacks", "The most valuable item stacks.", [
-    Option("title", "text", "Top stacks", "Title"),
+@widget("top_items", "Most valuable items", "Your highest-value items. Several of the same item count as one row.", [
+    Option("title", "text", "Most valuable", "Title"),
     Option("count", "int", 8, "Rows", minimum=1, maximum=12),
     Option("quantity", "bool", True, "Show quantity"),
     Option("icons", "bool", True, "Item icons"),

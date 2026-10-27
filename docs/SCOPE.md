@@ -53,8 +53,10 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 
 **Preset out of the box** (all editable):
 1. **Total**: stash value in divines, div/h in green, sparkline, "synced X min ago", clock.
-2. **Top**: the 8 most valuable stacks plus per-tab totals.
+2. **Top**: the 8 most valuable items (several of the same item count as one row), plus per-tab totals.
 3. **Session**: gain since the session started, and the divine price in chaos.
+
+A fourth example page, **League** (since league start, today, best hour, item prices), was dropped on 2026-10-27: "since league start" is about the same number as the stash total, and today and best hour are already on Total and Session. Its widgets and metrics stay available for custom pages.
 
 **Settings page** (served by the .exe on localhost, opened in the browser):
 - Add, remove, reorder, hide or duplicate any page, built-in ones included.
@@ -63,7 +65,7 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 - Configure league, poe.ninja items, intervals and the cookie in one place, with no hand-edited files.
 
 **Widgets for v1:**
-- Stash total, div/h, sparkline, session gain, top stacks, tab totals, divine price (the built-in pages are made from these).
+- Stash total, div/h, sparkline, session gain, most valuable items, tab totals, divine price (the built-in pages are made from these).
 - **Value since league start**: current value minus the first value recorded in the league.
 - **poe.ninja item price**: one or more items, batched into one request per poe.ninja category, at most every 30 min.
 - **Stack or tab value** from WealthyExile: a specific stack or stash tab.
