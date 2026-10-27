@@ -17,6 +17,15 @@ GOLD = "#E8C26A"
 STALE = "#FF9F1C"
 BACKGROUND = "#000000"
 
+# PoE-style frames, redrawn from the game's look (no game art).
+FRAME_LINE = "#8C7650"     # gold-brown border
+FRAME_LINE_DIM = "#4A3E2B"
+FRAME_FILL = "#0A0806"     # tooltip body, drawn semi-transparent
+HEADER_EDGE = "#15110C"    # header gradient, edges
+HEADER_MID = "#3B3022"     # header gradient, centre
+TITLE = "#E6D5A5"          # header text
+LABEL = "#A08A68"          # small labels and muted names in frames
+
 
 def signed_color(value: float | None) -> str:
     if value is None or abs(value) < 0.005:

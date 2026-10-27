@@ -10,13 +10,13 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from . import draw
+from . import draw, frames
 from .data import RenderData, fmt_duration
 from .draw import Ctx
-from .fonts import font, text_size
+from .fonts import NAME_FAMILY, TITLE_FAMILY, font, text_size
 from .templates import HEADER_BOX, TEMPLATES, Box
-from .theme import BACKGROUND, DOTS_Y, FAINT, HEIGHT, MUTED, STALE, WHITE, WIDTH
-from .widgets import WIDGETS, faint_frame
+from .theme import BACKGROUND, DOTS_Y, FAINT, HEIGHT, LABEL, MUTED, STALE, TITLE, WHITE, WIDTH
+from .widgets import NUMBER_FAMILY, WIDGETS, faint_frame, slot_title, without_title
 
 # Above this many pages the screen shows "3/9" instead of dots.
 MAX_DOTS = 8
@@ -24,31 +24,34 @@ MAX_DOTS = 8
 
 def header(ctx: Ctx, page: dict) -> None:
     opts = page["header"]
+    if not any(opts.values()):
+        return
     box = HEADER_BOX
+    frames.page_header(ctx, box)
     right = box.x + box.w
     if opts["clock"]:
-        cf = font("Inter", 18, 600)
+        cf = font(NUMBER_FAMILY, 17, 600)
         clock = datetime.fromtimestamp(ctx.data.now).astimezone().strftime("%H:%M")
         cw = text_size(clock, cf)[0]
-        draw.text_in(ctx, Box(right - cw, box.y + 4, cw, box.h - 8), clock, cf, WHITE, "right")
+        draw.text_in(ctx, Box(right - cw, box.y + 3, cw, box.h - 8), clock, cf, TITLE, "right")
         right -= cw + 12
     if opts["synced"]:
-        sf = font("Inter", 12, 500)
+        sf = font(NAME_FAMILY, 13, 400)
         data = ctx.data
         if data.synced_at is None:
-            label, color = "waiting for data", MUTED
+            label, color = "waiting for data", LABEL
         elif data.stale:
             label, color = f"stale · {fmt_duration(data.now - data.synced_at)} ago", STALE
         else:
             ago = fmt_duration(data.now - data.synced_at)
-            label, color = ("synced just now" if ago == "now" else f"synced {ago} ago"), MUTED
+            label, color = ("synced just now" if ago == "now" else f"synced {ago} ago"), LABEL
         sw = text_size(label, sf)[0]
-        draw.text_in(ctx, Box(right - sw, box.y + 4, sw, box.h - 8), label, sf, color, "right")
+        draw.text_in(ctx, Box(right - sw, box.y + 3, sw, box.h - 8), label, sf, color, "right")
         right -= sw + 12
     if opts["title"]:
-        tf = font("Cinzel", 20, 700)
-        title = draw.truncate(page["name"].upper(), tf, right - box.x)
-        draw.text_in(ctx, Box(box.x, box.y + 4, right - box.x, box.h - 8), title, tf, WHITE, "left")
+        tf = font(TITLE_FAMILY, 21, 400)
+        title = draw.truncate(page["name"], tf, right - box.x)
+        draw.text_in(ctx, Box(box.x, box.y + 3, right - box.x, box.h - 8), title, tf, TITLE, "left")
 
 
 def overlay(page: dict, data: RenderData, show_empty_slots: bool = False) -> Image.Image:
@@ -60,7 +63,13 @@ def overlay(page: dict, data: RenderData, show_empty_slots: bool = False) -> Ima
             if show_empty_slots:
                 faint_frame(ctx, box)
             continue
-        WIDGETS[slot["widget"]].render(ctx, box, slot)
+        options = slot
+        if slot["frame"] == "tooltip":
+            box = frames.tooltip(ctx, box, slot_title(slot))
+            options = without_title(slot)
+        elif slot["frame"] == "plain":
+            box = frames.tooltip(ctx, box)
+        WIDGETS[slot["widget"]].render(ctx, box, options)
     return ctx.img
 
 

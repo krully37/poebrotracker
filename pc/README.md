@@ -18,7 +18,7 @@ On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\python` instead.
 .venv/bin/python -m stashdisplay preview --out preview --scale 2
 ```
 
-This writes, for each page, `pageN-<id>.png` (exactly what the screen will show), `pageN-<id>-overlay.png` (the transparent layer sent to the screen), and `all-pages.png` with every page side by side.
+The first run downloads the game icons and the Fontin font into the local cache (add `--offline` to skip this and use fallbacks). This writes, for each page, `pageN-<id>.png` (exactly what the screen will show), `pageN-<id>-overlay.png` (the transparent layer sent to the screen), and `all-pages.png` with every page side by side.
 
 ## Tests
 
@@ -37,4 +37,6 @@ This writes, for each page, `pageN-<id>.png` (exactly what the screen will show)
 | `render/widgets.py` | Widget types, their options, how they draw |
 | `render/renderer.py` | Header, overlay, background, dots, preview |
 | `render/data.py` | Metrics and formatting for a render |
+| `assets.py` | Downloads and caches game icons (via poe.ninja) and Fontin |
+| `render/frames.py` | PoE tooltip-style frames and the page header bar |
 | `sources/` | Data sources: `demo.py` now, WealthyExile and poe.ninja later |

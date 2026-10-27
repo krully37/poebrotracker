@@ -8,6 +8,7 @@ then filled with a solid color, which keeps the edges clean.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
@@ -82,6 +83,40 @@ def truncate(s: str, f: ImageFont.FreeTypeFont, max_w: float) -> str:
     while s and text_size(s + "…", f)[0] > max_w:
         s = s[:-1]
     return (s.rstrip() + "…") if s else ""
+
+
+@lru_cache(maxsize=256)
+def _load_icon(path: str) -> Image.Image:
+    with Image.open(path) as im:
+        return im.convert("RGBA")
+
+
+def icon_image(ctx: Ctx, name: str) -> Image.Image | None:
+    lookup = ctx.data.icon if ctx.data else None
+    path = lookup(name) if lookup else None
+    return _load_icon(str(path)) if path else None
+
+
+def has_icon(ctx: Ctx, name: str) -> bool:
+    return icon_image(ctx, name) is not None or name == "Divine Orb"
+
+
+def item_icon(ctx: Ctx, name: str, x: float, y: float, size: float) -> bool:
+    """Draw the game icon of `name` centered in a size x size square. False if there is none.
+
+    Without the real icon, the Divine Orb falls back to a drawn orb.
+    """
+    im = icon_image(ctx, name)
+    if im is None:
+        if name == "Divine Orb":
+            divine_icon(ctx, x, y, size)
+            return True
+        return False
+    scale = size / max(im.width, im.height)
+    w, h = max(1, round(im.width * scale)), max(1, round(im.height * scale))
+    resized = im.resize((w, h), Image.Resampling.LANCZOS)
+    ctx.img.alpha_composite(resized, (int(round(x + (size - w) / 2)), int(round(y + (size - h) / 2))))
+    return True
 
 
 def divine_icon(ctx: Ctx, x: float, y: float, size: float) -> None:

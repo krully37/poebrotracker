@@ -71,6 +71,16 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 
 **Session** resets when the script starts and on a long press. It does not reset daily.
 
+## 4b. Visual style (PoE look)
+
+Decided 2026-10-27. This is a private tool that is never distributed, so it uses the game's own art. That art is never committed to the repo.
+
+- **Real item icons**, from GGG's image server (`web.poecdn.com`), using the links in poe.ninja's economy data. The full-size originals (`/image/Art/...`) are used when available. Divination cards share the game's card inventory icon.
+- **Fontin** (the game's font) for titles, labels, item names and numbers. It is downloaded from the designer's site (exljbris.com), whose licence allows free use but forbids redistribution. Fontin has no "×", so quantities are written "x148".
+- **Tooltip-style frames redrawn in code**: gradient header bar, gold-brown borders, diamond ornaments. Each slot can use `tooltip` (header with the title), `plain` (frame only) or `none`.
+- Icons and fonts are **downloaded on first run and cached** in `%APPDATA%\stashdisplay\cache`. The icon index is refreshed at most once a week (~26 poe.ninja requests). Without the cache (offline, or download failed), the renderer falls back to bundled fonts and a drawn divine orb.
+- Not used: in-game text colours by item type.
+
 ## 5. Backgrounds and media
 
 - Formats: **still image, GIF, video** (video is converted to MJPEG on the PC with ffmpeg).
@@ -108,7 +118,7 @@ Frame rate for slides and animated backgrounds is **unknown until the hardware a
 | Part | Choice | Why |
 |---|---|---|
 | PC language | Python 3.12+ | The brief's recommendation, with a good ecosystem for images (Pillow) and serial (pyserial) |
-| Page rendering | Pillow, with bundled open-licence fonts | The same code produces the preview and the screen image |
+| Page rendering | Pillow; PoE look (§4b); bundled open-licence fonts as fallback | The same code produces the preview and the screen image |
 | Settings page | Small local web server (Python) + plain HTML/JS, no build step | Nothing to install, and it opens in any browser |
 | Overlay transfer | RGB565 + 4-bit alpha, zlib-compressed, sent in chunks over USB serial | The ESP32 ROM has zlib inflate built in. Mostly-transparent overlays compress very well |
 | Firmware | Arduino core 3.x + Arduino_GFX (panel driver only), own compositor, JPEGDEC / AnimatedGIF (bitbank2) for media | No LVGL: it wouldn't be faster here, and the PC now does the layout |

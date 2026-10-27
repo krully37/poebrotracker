@@ -1,4 +1,10 @@
-"""Bundled fonts (all SIL Open Font License, see assets/fonts/OFL-*.txt) and text fitting."""
+"""Fonts and text fitting.
+
+Bundled fonts (SIL Open Font License, see assets/fonts/OFL-*.txt) are variable
+fonts with a weight axis. Fontin, the game's font, is downloaded on first run
+(see assets.py) and registered here as separate files per weight. Until then,
+anything asking for it falls back to a bundled font.
+"""
 
 from functools import lru_cache
 from pathlib import Path
@@ -7,7 +13,7 @@ from PIL import ImageFont
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 
-FAMILIES = {
+BUNDLED = {
     "Cinzel": "Cinzel.ttf",
     "Inter": "Inter.ttf",
     "JetBrains Mono": "JetBrainsMono.ttf",
@@ -15,10 +21,38 @@ FAMILIES = {
 }
 DEFAULT_FAMILY = "Inter"
 
+# Families made of one file per weight, added at runtime: {family: {weight: path}}.
+_static: dict[str, dict[int, Path]] = {}
+FALLBACK = {"Fontin": "Cinzel", "Fontin SmallCaps": "Cinzel"}
+
+# The game look, used by the header, labels and frames.
+TITLE_FAMILY = "Fontin SmallCaps"
+NAME_FAMILY = "Fontin"
+
+
+def register_fontin(files: dict[str, Path]) -> None:
+    """Make Fontin available from the files AssetCache.fontin() returned."""
+    if "SmallCaps" in files:
+        _static["Fontin SmallCaps"] = {400: files["SmallCaps"]}
+    weights = {w: files[s] for w, s in ((400, "Regular"), (700, "Bold")) if s in files}
+    if weights:
+        _static["Fontin"] = weights
+    font.cache_clear()
+    fit.cache_clear()
+
+
+def families() -> list[str]:
+    return [*BUNDLED, *(f for f in FALLBACK if f in _static)]
+
 
 @lru_cache(maxsize=1024)
 def font(family: str, size: int, weight: int = 400) -> ImageFont.FreeTypeFont:
-    path = FONT_DIR / FAMILIES.get(family, FAMILIES[DEFAULT_FAMILY])
+    if family in _static:
+        by_weight = _static[family]
+        nearest = min(by_weight, key=lambda w: abs(w - weight))
+        return ImageFont.truetype(str(by_weight[nearest]), size)
+    family = FALLBACK.get(family, family)
+    path = FONT_DIR / BUNDLED.get(family, BUNDLED[DEFAULT_FAMILY])
     f = ImageFont.truetype(str(path), size)
     values = []
     for axis in f.get_variation_axes():

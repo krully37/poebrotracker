@@ -1,6 +1,8 @@
 """Everything a page needs to be drawn, computed once per render from history and the last snapshot."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .. import stats
 from ..history import History
@@ -48,6 +50,8 @@ class RenderData:
     session_series: list[float] = field(default_factory=list)
     session_start: float = 0.0
     item_prices: dict[str, ItemPrice] = field(default_factory=dict)
+    # Item name -> local icon file (AssetCache.icon). None renders without game icons.
+    icon: Callable[[str], Path | None] | None = None
 
     @property
     def stale(self) -> bool:
@@ -73,6 +77,7 @@ def build(
     item_prices: dict[str, ItemPrice] | None = None,
     spark_points: int = 48,
     rate_window: float = 3600,
+    icon: Callable[[str], Path | None] | None = None,
 ) -> RenderData:
     pts = history.points
     total = snapshot.total if snapshot else (pts[-1][1] if pts else None)
@@ -99,6 +104,7 @@ def build(
         session_series=[v for _, v in session_pts],
         session_start=history.session_start,
         item_prices=item_prices or {},
+        icon=icon,
     )
 
 

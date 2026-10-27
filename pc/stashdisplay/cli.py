@@ -1,7 +1,9 @@
 """Command line entry point.
 
-    stashdisplay preview [--out DIR] [--scale N] [--seed N]
+    stashdisplay preview [--out DIR] [--scale N] [--seed N] [--offline]
         Render every page with demo data to PNG files (no screen, no WealthyExile needed).
+        Downloads game icons and the Fontin font into the local cache the first time,
+        unless --offline.
 """
 
 import argparse
@@ -10,14 +12,15 @@ import time
 from pathlib import Path
 
 from . import pages as pagelib
+from .assets import AssetCache
 from .history import History
 from .render import data as renderdata
-from .render import renderer
+from .render import fonts, renderer
 from .render.data import ItemPrice
 from .sources.demo import DemoSource
 
 
-def demo_render_data(now: float, seed: int | None = None) -> renderdata.RenderData:
+def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | None = None) -> renderdata.RenderData:
     """About 6 hours of fake history, a session that started 2 hours ago, and fake poe.ninja prices."""
     source = DemoSource(seed=seed)
     source.sim_time = now
@@ -34,13 +37,17 @@ def demo_render_data(now: float, seed: int | None = None) -> renderdata.RenderDa
         "Mageblood": ItemPrice(chaos=round(last.div_price * 182), div=182.0, change=7.5),
         "Headhunter": ItemPrice(chaos=round(last.div_price * 34.5), div=34.5, change=-12.0),
     }
-    return renderdata.build(history, last, now=now, synced_at=now - 130, item_prices=prices)
+    return renderdata.build(
+        history, last, now=now, synced_at=now - 130, item_prices=prices, icon=assets.icon if assets else None
+    )
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    data = demo_render_data(time.time(), seed=args.seed)
+    assets = AssetCache(offline=args.offline)
+    fonts.register_fontin(assets.fontin())
+    data = demo_render_data(time.time(), seed=args.seed, assets=assets)
     shown = pagelib.visible(pagelib.preset())
     images, labels = [], []
     for i, page in enumerate(shown):
@@ -65,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="preview", help="output folder (default: ./preview)")
     p.add_argument("--scale", type=int, default=1, help="also write N-times enlarged copies")
     p.add_argument("--seed", type=int, default=7, help="demo data seed, for repeatable images")
+    p.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
     p.set_defaults(func=cmd_preview)
     args = parser.parse_args(argv)
     return args.func(args)

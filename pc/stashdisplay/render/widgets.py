@@ -2,6 +2,10 @@
 
 Each widget declares its options (used to fill in defaults now, and to build
 the settings form later) and a function that draws it inside a box.
+
+Every slot also has a `frame` option, handled by the renderer: "tooltip" draws
+a PoE tooltip frame with the widget's title in its header, "plain" draws the
+frame without a header, "none" draws nothing.
 """
 
 import re
@@ -13,9 +17,14 @@ from typing import Any
 from . import draw
 from .data import METRICS, RenderData, fmt_amount, fmt_duration, fmt_metric
 from .draw import Ctx
-from .fonts import FAMILIES, fit, font, text_size
+from .fonts import BUNDLED, FALLBACK, NAME_FAMILY, TITLE_FAMILY, fit, font, text_size
 from .templates import Box
-from .theme import FAINT, GOLD, MUTED, SPARK, WHITE, signed_color
+from .theme import FAINT, GOLD, LABEL, MUTED, SPARK, WHITE, signed_color
+
+FRAMES = ["tooltip", "plain", "none"]
+FONT_CHOICES = [*BUNDLED, *FALLBACK]
+# Fontin has no "×" sign, so quantities are written "x148".
+NUMBER_FAMILY = "Fontin"
 
 
 @dataclass
@@ -36,6 +45,7 @@ class WidgetType:
     description: str
     options: list[Option]
     render: Callable[[Ctx, Box, dict], None]
+    frame: str = "tooltip"  # default frame for new slots with this widget
 
     def defaults(self) -> dict:
         return {o.key: o.default for o in self.options}
@@ -44,19 +54,40 @@ class WidgetType:
 WIDGETS: dict[str, WidgetType] = {}
 
 
-def widget(id: str, name: str, description: str, options: list[Option]):
+def widget(id: str, name: str, description: str, options: list[Option], frame: str = "tooltip"):
     def register(fn):
-        WIDGETS[id] = WidgetType(id, name, description, options, fn)
+        WIDGETS[id] = WidgetType(id, name, description, options, fn, frame)
         return fn
     return register
 
 
-def _font_options(family: str = "Inter", weight: int = 700, color: str = "auto") -> list[Option]:
+def _font_options(family: str = NUMBER_FAMILY, weight: int = 700, color: str = "auto") -> list[Option]:
     return [
-        Option("font", "font", family, "Font", choices=list(FAMILIES)),
+        Option("font", "font", family, "Font", choices=FONT_CHOICES),
         Option("weight", "weight", weight, "Weight", minimum=100, maximum=900),
         Option("color", "color", color, "Color ('auto' = green/red for gains)"),
     ]
+
+
+# --- Titles: shown in the tooltip header, or above the content without one ---
+
+def slot_title(slot: dict) -> str:
+    kind = slot["widget"]
+    if kind == "value":
+        if slot["label"] == "-":
+            return ""
+        return slot["label"] or METRICS.get(slot["metric"], METRICS["total"]).label
+    if kind == "stack_value":
+        return "" if slot["label"] == "-" else (slot["label"] or slot["name"])
+    return slot.get("title", "")
+
+
+def without_title(slot: dict) -> dict:
+    """The slot's options with its title removed, once the frame header shows it."""
+    key = {"value": "label", "stack_value": "label"}.get(slot["widget"], "title")
+    if key not in slot:
+        return slot
+    return {**slot, key: "-" if key == "label" else ""}
 
 
 # --- Placeholders for free text: "{rate} div/h", "since {session_since}" ----
@@ -110,39 +141,56 @@ def slot_label(ctx: Ctx, box: Box, label: str, align: str = "left") -> Box:
     """Small-caps label at the top of a slot; returns the space left under it."""
     if not label:
         return box
-    size = label_size(box)
-    lf = font("Cinzel", size, 700)
-    draw.text_in(ctx, Box(box.x, box.y, box.w, size), draw.truncate(label.upper(), lf, box.w), lf, MUTED, align, "top")
+    size = label_size(box) + 2
+    lf = font(TITLE_FAMILY, size, 400)
+    draw.text_in(ctx, Box(box.x, box.y, box.w, size), draw.truncate(label, lf, box.w), lf, LABEL, align, "top")
     used = size + 8
     return Box(box.x, box.y + used, box.w, box.h - used)
 
 
+def icon_room(cap: int) -> tuple[int, int]:
+    """Icon size and gap for a number whose digits are `cap` pixels tall."""
+    return int(cap * 1.3), int(cap * 0.15)
+
+
+def fit_with_icon(text: str, family: str, weight: int, max_w: int, max_h: int, icon: bool):
+    """Like fonts.fit, but the width also has to hold the icon, which grows with the font."""
+    lo, hi = 6, 150
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        f = font(family, mid, weight)
+        w, h = text_size(text, f)
+        cap = draw.cap_height(f)
+        extra = sum(icon_room(cap)) if icon else 0
+        if w + extra <= max_w and max(h, cap) <= max_h:
+            lo = mid
+        else:
+            hi = mid - 1
+    return font(family, lo, weight)
+
+
 def value_block(ctx: Ctx, box: Box, *, label: str, main: str, sub: str, color: str, sub_color: str,
-                icon: bool, family: str, weight: int, align: str) -> None:
-    """Small label on top, a big number (with optional divine icon), an optional line below."""
+                icon: str | None, family: str, weight: int, align: str) -> None:
+    """Small label on top, a big number (with an optional item icon), an optional line below."""
     box = slot_label(ctx, box, label, align)
-    sub_h = int(min(17, max(11, box.h * 0.16))) if sub else 0
-    main_h = box.h - (sub_h + 8 if sub else 0)
-    max_text_h = int(main_h * 0.75)
+    sub_h = int(min(17, max(11, box.h * 0.18))) if sub else 0
+    main_h = box.h - (sub_h + 6 if sub else 0)
+    max_text_h = int(main_h * 0.72)
     if main == "--":
         # No value yet: a quiet dash instead of a giant placeholder.
-        main, icon, color, max_text_h = "—", False, MUTED, int(main_h * 0.3)
-    # The icon is as tall as the digits; reserve room for it before fitting the number.
-    gap = int(max_text_h * 0.18) if icon else 0
-    reserve = max_text_h + gap if icon else 0
-    mf = fit(main, family, weight, box.w - reserve, max_text_h, max_size=150)
+        main, icon, color, max_text_h = "—", None, MUTED, int(main_h * 0.3)
+    mf = fit_with_icon(main, family, weight, box.w, max_text_h, bool(icon))
     w, _ = text_size(main, mf)
     cap = draw.cap_height(mf)
-    icon_size = int(cap * 1.1) if icon else 0
-    gap = int(cap * 0.2) if icon else 0
+    icon_size, gap = icon_room(cap) if icon else (0, 0)
     group_w = icon_size + gap + w
     gx = {"left": box.x, "center": box.x + (box.w - group_w) / 2, "right": box.x + box.w - group_w}[align]
     baseline = box.y + (main_h + cap) / 2
     if icon:
-        draw.divine_icon(ctx, gx, baseline - cap / 2 - icon_size / 2, icon_size)
+        draw.item_icon(ctx, icon, gx, baseline - cap / 2 - icon_size / 2, icon_size)
     draw.text(ctx, (gx + icon_size + gap - mf.getbbox(main, anchor="ls")[0], baseline), main, mf, color)
     if sub:
-        sf = fit(sub, "Inter", 500, box.w, sub_h, max_size=17)
+        sf = fit(sub, NUMBER_FAMILY, 500, box.w, sub_h, max_size=17)
         draw.text_in(ctx, Box(box.x, box.y + box.h - sub_h, box.w, sub_h), sub, sf, sub_color, align, "bottom")
 
 
@@ -155,8 +203,37 @@ def rows(box: Box, count: int) -> list[Box]:
     return [Box(box.x, int(box.y + i * row_h), box.w, int(row_h)) for i in range(count)]
 
 
+def row_fonts(row: Box, scale: float = 0.55, largest: int = 18):
+    size = int(min(largest, max(10, row.h * scale)))
+    return font(NAME_FAMILY, size + 1, 400), font(NUMBER_FAMILY, size, 700), font(NUMBER_FAMILY, size, 500)
+
+
+def row_icon(ctx: Ctx, name: str, row: Box, x: float) -> float:
+    """Item icon at the start of a list row; returns where the text starts.
+
+    The space is kept even without an icon, so names stay aligned.
+    """
+    size = row.h * 0.9
+    draw.item_icon(ctx, name, x, row.y + (row.h - size) / 2, size)
+    return x + size + 6
+
+
+def amount_with_unit(ctx: Ctx, row: Box, right: float, value: float, f, unit: str = "Divine Orb", icon: bool = True) -> float:
+    """Right-aligned amount, optionally followed by a currency icon; returns the left edge used."""
+    size = int(f.size * 1.15)
+    if icon and draw.has_icon(ctx, unit):
+        draw.item_icon(ctx, unit, right - size, row.y + (row.h - size) / 2, size)
+        right -= size + 3
+        text = fmt_amount(value) if unit == "Divine Orb" else f"{value:,.0f}"
+    else:
+        text = fmt_amount(value) if unit == "Divine Orb" else f"{value:,.0f}c"
+    w = text_size(text, f)[0]
+    draw.text_in(ctx, Box(right - w, row.y, w, row.h), text, f, WHITE, "right")
+    return right - w
+
+
 def empty(ctx: Ctx, box: Box, message: str) -> None:
-    f = font("Inter", 13, 500)
+    f = font(NAME_FAMILY, 14, 400)
     draw.text_in(ctx, box, draw.truncate(message, f, box.w), f, MUTED, "center", "middle")
 
 
@@ -166,37 +243,46 @@ def empty(ctx: Ctx, box: Box, message: str) -> None:
     Option("metric", "metric", "total", "Metric", choices=list(METRICS)),
     Option("label", "text", "", "Label (empty = metric name, '-' = none)"),
     Option("sub", "text", "", "Line below, e.g. '{rate} div/h'"),
-    Option("icon", "bool", True, "Divine icon"),
+    Option("icon", "bool", True, "Currency icon"),
     Option("align", "choice", "left", "Alignment", choices=["left", "center", "right"]),
     *_font_options(),
 ])
 def render_value(ctx: Ctx, box: Box, o: dict) -> None:
     metric = METRICS.get(o["metric"], METRICS["total"])
     label = "" if o["label"] == "-" else (o["label"] or metric.label)
-    main = fmt_metric(metric.kind, ctx.data.metrics.get(metric.id))
+    value = ctx.data.metrics.get(metric.id)
+    main = fmt_metric(metric.kind, value)
+    icon = None
+    if o["icon"]:
+        if metric.kind != "chaos":
+            icon = "Divine Orb"
+        elif draw.has_icon(ctx, "Chaos Orb") and value is not None:
+            icon, main = "Chaos Orb", f"{value:,.0f}"  # the icon replaces the "c"
     sub = fill_placeholders(o["sub"], ctx.data) if o["sub"] else ""
     value_block(
         ctx, box, label=label, main=main, sub=sub,
         color=color_for(o["color"], ctx.data, metric.id),
         sub_color=color_for("auto", ctx.data, first_metric(o["sub"])) if first_metric(o["sub"]) else MUTED,
-        icon=o["icon"] and metric.kind != "chaos", family=o["font"], weight=o["weight"], align=o["align"],
+        icon=icon, family=o["font"], weight=o["weight"], align=o["align"],
     )
 
 
 @widget("sparkline", "Chart", "The stash value over time as a line.", [
+    Option("title", "text", "", "Title"),
     Option("series", "choice", "total", "Data", choices=["total", "session"]),
     Option("color", "color", SPARK, "Line color"),
     Option("fill", "bool", True, "Shade under the line"),
     Option("range", "bool", True, "Show min and max"),
-])
+], frame="plain")
 def render_sparkline(ctx: Ctx, box: Box, o: dict) -> None:
+    box = list_title(ctx, box, o["title"])
     values = ctx.data.session_series if o["series"] == "session" else ctx.data.total_series
     if len(values) < 2:
         empty(ctx, box, "Collecting data…")
         return
     label_w = 0
     if o["range"]:
-        lf = font("Inter", 11, 500)
+        lf = font(NUMBER_FAMILY, 11, 500)
         hi, lo = fmt_amount(max(values)), fmt_amount(min(values))
         label_w = max(text_size(hi, lf)[0], text_size(lo, lf)[0]) + 6
         draw.text_in(ctx, Box(box.x + box.w - label_w + 6, box.y, label_w, 12), hi, lf, MUTED, "left", "top")
@@ -217,6 +303,8 @@ def render_sparkline(ctx: Ctx, box: Box, o: dict) -> None:
     Option("title", "text", "Top stacks", "Title"),
     Option("count", "int", 8, "Rows", minimum=1, maximum=12),
     Option("quantity", "bool", True, "Show quantity"),
+    Option("icons", "bool", True, "Item icons"),
+    Option("unit_icons", "bool", False, "Divine icon after each value"),
 ])
 def render_top_items(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
@@ -225,28 +313,23 @@ def render_top_items(ctx: Ctx, box: Box, o: dict) -> None:
         empty(ctx, box, "No data yet")
         return
     for row, item in zip(rows(box, o["count"]), items):
-        f = font("Inter", int(min(18, max(10, row.h * 0.52))), 500)
-        vf = font("Inter", f.size, 700)
-        value = fmt_amount(item.value)
-        icon = int(f.size * 0.85)
-        vw = text_size(value, vf)[0]
-        right = row.x + row.w - icon - 4
-        draw.divine_icon(ctx, right + 4, row.y + (row.h - icon) / 2, icon)
-        draw.text_in(ctx, Box(right - vw, row.y, vw, row.h), value, vf, WHITE, "right")
-        name_right = right - vw - 10
+        nf, vf, qf = row_fonts(row)
+        left = row_icon(ctx, item.name, row, row.x) if o["icons"] else row.x
+        name_right = amount_with_unit(ctx, row, row.x + row.w, item.value, vf, icon=o["unit_icons"]) - 8
         if o["quantity"]:
-            qty = f"×{item.quantity:,}"
-            qw = text_size(qty, f)[0]
-            draw.text_in(ctx, Box(name_right - qw, row.y, qw, row.h), qty, f, MUTED, "right")
-            name_right -= qw + 8
-        name = draw.truncate(item.name, f, name_right - row.x)
-        draw.text_in(ctx, Box(row.x, row.y, name_right - row.x, row.h), name, f, WHITE, "left")
+            qty = f"x{item.quantity:,}"
+            qw = text_size(qty, qf)[0]
+            draw.text_in(ctx, Box(name_right - qw, row.y, qw, row.h), qty, qf, MUTED, "right")
+            name_right -= qw + 6
+        name = draw.truncate(item.name, nf, name_right - left)
+        draw.text_in(ctx, Box(left, row.y, name_right - left, row.h), name, nf, WHITE, "left")
 
 
 @widget("tab_totals", "Stash tabs", "Value of each stash tab, with bars.", [
     Option("title", "text", "Tabs", "Title"),
     Option("count", "int", 8, "Rows", minimum=1, maximum=12),
     Option("bars", "bool", True, "Show bars"),
+    Option("unit_icons", "bool", False, "Divine icon after each value"),
 ])
 def render_tab_totals(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
@@ -256,18 +339,15 @@ def render_tab_totals(ctx: Ctx, box: Box, o: dict) -> None:
         return
     top = tabs[0].value or 1.0
     for row, tab in zip(rows(box, o["count"]), tabs):
-        f = font("Inter", int(min(18, max(10, row.h * 0.52))), 500)
-        vf = font("Inter", f.size, 700)
+        nf, vf, _ = row_fonts(row)
         if o["bars"]:
             bw = max(4, row.w * tab.value / top)
             pad = row.h * 0.12
-            draw.paint(ctx, GOLD, lambda d, r=row: d.rounded_rectangle(
-                (r.x, r.y + pad, r.x + bw, r.y + r.h - pad), radius=3, fill=255), alpha=38)
-        value = fmt_amount(tab.value)
-        vw = text_size(value, vf)[0]
-        draw.text_in(ctx, Box(row.x + row.w - vw - 6, row.y, vw, row.h), value, vf, WHITE, "right")
-        name = draw.truncate(tab.name, f, row.w - vw - 22)
-        draw.text_in(ctx, Box(row.x + 6, row.y, row.w - vw - 22, row.h), name, f, WHITE, "left")
+            draw.paint(ctx, GOLD, lambda d, r=row: d.rectangle(
+                (r.x, r.y + pad, r.x + bw, r.y + r.h - pad), fill=255), alpha=34)
+        name_right = amount_with_unit(ctx, row, row.x + row.w - 4, tab.value, vf, icon=o["unit_icons"]) - 8
+        name = draw.truncate(tab.name, nf, name_right - row.x - 6)
+        draw.text_in(ctx, Box(row.x + 6, row.y, name_right - row.x - 6, row.h), name, nf, WHITE, "left")
 
 
 @widget("item_price", "Item prices", "Prices of chosen items from poe.ninja.", [
@@ -275,6 +355,7 @@ def render_tab_totals(ctx: Ctx, box: Box, o: dict) -> None:
     Option("items", "items", ["Mirror of Kalandra"], "Items"),
     Option("unit", "choice", "div", "Unit", choices=["div", "chaos"]),
     Option("change", "bool", True, "Show 7-day change"),
+    Option("icons", "bool", True, "Item icons"),
 ])
 def render_item_price(ctx: Ctx, box: Box, o: dict) -> None:
     box = list_title(ctx, box, o["title"])
@@ -283,35 +364,32 @@ def render_item_price(ctx: Ctx, box: Box, o: dict) -> None:
         empty(ctx, box, "No items chosen")
         return
     for row, name in zip(rows(box, max(len(names), 3)), names):
-        f = font("Inter", int(min(20, max(10, row.h * 0.5))), 500)
-        vf = font("Inter", f.size, 700)
+        nf, vf, qf = row_fonts(row, scale=0.5, largest=19)
+        left = row_icon(ctx, name, row, row.x) if o["icons"] else row.x
         price = ctx.data.item_prices.get(name)
-        if price is None:
-            value, change = "--", None
-        elif o["unit"] == "div" and price.div is not None:
-            value, change = fmt_amount(price.div), price.change
-        else:
-            value, change = f"{price.chaos:,.0f}c", price.change
         right = row.x + row.w
-        if o["change"] and change is not None:
-            ct = f"{change:+.0f}%"
-            cw = text_size(ct, f)[0]
-            draw.text_in(ctx, Box(right - cw, row.y, cw, row.h), ct, f, signed_color(change), "right")
-            right -= cw + 10
-        icon = int(f.size * 0.85) if o["unit"] == "div" and price and price.div is not None else 0
-        if icon:
-            draw.divine_icon(ctx, right - icon, row.y + (row.h - icon) / 2, icon)
-            right -= icon + 4
-        vw = text_size(value, vf)[0]
-        draw.text_in(ctx, Box(right - vw, row.y, vw, row.h), value, vf, WHITE, "right")
-        label = draw.truncate(name, f, right - vw - 10 - row.x)
-        draw.text_in(ctx, Box(row.x, row.y, right - vw - 10 - row.x, row.h), label, f, WHITE, "left")
+        if price is not None and o["change"] and price.change is not None:
+            ct = f"{price.change:+.0f}%"
+            cw = text_size(ct, qf)[0]
+            draw.text_in(ctx, Box(right - cw, row.y, cw, row.h), ct, qf, signed_color(price.change), "right")
+            right -= cw + 8
+        if price is None:
+            dash = "—"
+            dw = text_size(dash, vf)[0]
+            draw.text_in(ctx, Box(right - dw, row.y, dw, row.h), dash, vf, MUTED, "right")
+            right -= dw
+        elif o["unit"] == "div" and price.div is not None:
+            right = amount_with_unit(ctx, row, right, price.div, vf)
+        else:
+            right = amount_with_unit(ctx, row, right, price.chaos, vf, unit="Chaos Orb")
+        label = draw.truncate(name, nf, right - 8 - left)
+        draw.text_in(ctx, Box(left, row.y, right - 8 - left, row.h), label, nf, WHITE, "left")
 
 
 @widget("stack_value", "Stack or tab", "The value of one item stack or one stash tab.", [
     Option("match", "choice", "item", "Look up", choices=["item", "tab"]),
     Option("name", "text", "Divine Orb", "Item or tab name"),
-    Option("label", "text", "", "Label (empty = the name)"),
+    Option("label", "text", "", "Label (empty = the name, '-' = none)"),
     Option("icon", "bool", True, "Divine icon"),
     Option("align", "choice", "left", "Alignment", choices=["left", "center", "right"]),
     *_font_options(color=WHITE),
@@ -324,11 +402,12 @@ def render_stack_value(ctx: Ctx, box: Box, o: dict) -> None:
     elif ctx.data.snapshot:
         item = next((i for i in ctx.data.snapshot.items if i.name.lower() == wanted), None)
         if item:
-            value, sub = item.value, f"×{item.quantity:,}"
+            value, sub = item.value, f"x{item.quantity:,}"
     value_block(
-        ctx, box, label=o["label"] or o["name"], main=fmt_amount(value) if value is not None else "--",
-        sub=sub, color=color_for(o["color"], ctx.data, None), sub_color=MUTED, icon=o["icon"],
-        family=o["font"], weight=o["weight"], align=o["align"],
+        ctx, box, label="" if o["label"] == "-" else (o["label"] or o["name"]),
+        main=fmt_amount(value) if value is not None else "--",
+        sub=sub, color=color_for(o["color"], ctx.data, None), sub_color=MUTED,
+        icon="Divine Orb" if o["icon"] else None, family=o["font"], weight=o["weight"], align=o["align"],
     )
 
 
@@ -336,8 +415,8 @@ def render_stack_value(ctx: Ctx, box: Box, o: dict) -> None:
     Option("text", "text", "{league}", "Text"),
     Option("size", "int", 0, "Size (0 = fit the slot)", minimum=0, maximum=120),
     Option("align", "choice", "left", "Alignment", choices=["left", "center", "right"]),
-    *_font_options(weight=500, color=MUTED),
-])
+    *_font_options(family=NAME_FAMILY, weight=400, color=LABEL),
+], frame="none")
 def render_text(ctx: Ctx, box: Box, o: dict) -> None:
     s = fill_placeholders(o["text"], ctx.data)
     if not s:
@@ -356,13 +435,13 @@ def render_text(ctx: Ctx, box: Box, o: dict) -> None:
     Option("date", "bool", True, "Show the date"),
     Option("align", "choice", "center", "Alignment", choices=["left", "center", "right"]),
     *_font_options(color=WHITE),
-])
+], frame="none")
 def render_clock(ctx: Ctx, box: Box, o: dict) -> None:
     now = datetime.fromtimestamp(ctx.data.now).astimezone()
     main = now.strftime("%H:%M") if o["hours"] == "24h" else now.strftime("%I:%M %p").lstrip("0")
     value_block(
         ctx, box, label="", main=main, sub=now.strftime("%A %d %B") if o["date"] else "",
-        color=color_for(o["color"], ctx.data, None), sub_color=MUTED, icon=False,
+        color=color_for(o["color"], ctx.data, None), sub_color=MUTED, icon=None,
         family=o["font"], weight=o["weight"], align=o["align"],
     )
 

@@ -8,8 +8,6 @@ A 3.5" USB touchscreen that sits next to the keyboard and shows the value of a P
 - [docs/BRIEF.md](docs/BRIEF.md): the original brief
 - [pc/README.md](pc/README.md): run the PC app and its previews
 
-![Preset pages rendered with demo data](docs/img/preview-demo.png)
-
 ## Layout
 
 | Folder | What |
@@ -21,3 +19,5 @@ A 3.5" USB touchscreen that sits next to the keyboard and shows the value of a P
 ## Secrets
 
 The WealthyExile session cookie lives only in the user's settings file (`%APPDATA%\stashdisplay\settings.json` on Windows). It is never committed and never sent to the screen.
+
+Game icons and the Fontin font are downloaded on first run into `%APPDATA%\stashdisplay\cache` and are never committed (see [docs/SCOPE.md](docs/SCOPE.md) §4b).

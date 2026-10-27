@@ -18,7 +18,7 @@ import uuid
 
 from .render.templates import TEMPLATES
 from .render.theme import BACKGROUND
-from .render.widgets import WIDGETS
+from .render.widgets import FRAMES, WIDGETS
 
 DEFAULT_HEADER = {"title": True, "clock": True, "synced": True}
 DEFAULT_BACKGROUND = {"kind": "color", "value": BACKGROUND}
@@ -29,7 +29,7 @@ def normalize_slot(slot: dict | None) -> dict | None:
     if not slot or slot.get("widget") not in WIDGETS:
         return None
     wt = WIDGETS[slot["widget"]]
-    out = {"widget": wt.id}
+    out = {"widget": wt.id, "frame": slot.get("frame") if slot.get("frame") in FRAMES else wt.frame}
     for opt in wt.options:
         value = slot.get(opt.key, copy.deepcopy(opt.default))
         if opt.kind == "int":
