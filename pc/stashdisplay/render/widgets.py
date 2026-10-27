@@ -153,9 +153,9 @@ def icon_room(cap: int) -> tuple[int, int]:
     return int(cap * 1.3), int(cap * 0.15)
 
 
-def fit_with_icon(text: str, family: str, weight: int, max_w: int, max_h: int, icon: bool):
+def fit_with_icon(text: str, family: str, weight: int, max_w: int, max_h: int, icon: bool, max_size: int = 150):
     """Like fonts.fit, but the width also has to hold the icon, which grows with the font."""
-    lo, hi = 6, 150
+    lo, hi = 6, max(6, max_size)
     while lo < hi:
         mid = (lo + hi + 1) // 2
         f = font(family, mid, weight)
@@ -170,8 +170,12 @@ def fit_with_icon(text: str, family: str, weight: int, max_w: int, max_h: int, i
 
 
 def value_block(ctx: Ctx, box: Box, *, label: str, main: str, sub: str, color: str, sub_color: str,
-                icon: str | None, family: str, weight: int, align: str) -> None:
-    """Small label on top, a big number (with an optional item icon), an optional line below."""
+                icon: str | None, family: str, weight: int, align: str, size: int = 0) -> None:
+    """Small label on top, a big number (with an optional item icon), an optional line below.
+
+    `size` caps the number's font size so several tiles can match; 0 fills the slot.
+    It still shrinks when the number would not fit.
+    """
     box = slot_label(ctx, box, label, align)
     sub_h = int(min(17, max(11, box.h * 0.18))) if sub else 0
     main_h = box.h - (sub_h + 6 if sub else 0)
@@ -179,7 +183,7 @@ def value_block(ctx: Ctx, box: Box, *, label: str, main: str, sub: str, color: s
     if main == "--":
         # No value yet: a quiet dash instead of a giant placeholder.
         main, icon, color, max_text_h = "—", None, MUTED, int(main_h * 0.3)
-    mf = fit_with_icon(main, family, weight, box.w, max_text_h, bool(icon))
+    mf = fit_with_icon(main, family, weight, box.w, max_text_h, bool(icon), size or 150)
     w, _ = text_size(main, mf)
     cap = draw.cap_height(mf)
     icon_size, gap = icon_room(cap) if icon else (0, 0)
@@ -244,6 +248,7 @@ def empty(ctx: Ctx, box: Box, message: str) -> None:
     Option("label", "text", "", "Label (empty = metric name, '-' = none)"),
     Option("sub", "text", "", "Line below, e.g. '{rate} div/h'"),
     Option("icon", "bool", True, "Currency icon"),
+    Option("size", "int", 0, "Size (0 = fit the slot)", minimum=0, maximum=150),
     Option("align", "choice", "left", "Alignment", choices=["left", "center", "right"]),
     *_font_options(),
 ])
@@ -263,7 +268,7 @@ def render_value(ctx: Ctx, box: Box, o: dict) -> None:
         ctx, box, label=label, main=main, sub=sub,
         color=color_for(o["color"], ctx.data, metric.id),
         sub_color=color_for("auto", ctx.data, first_metric(o["sub"])) if first_metric(o["sub"]) else MUTED,
-        icon=icon, family=o["font"], weight=o["weight"], align=o["align"],
+        icon=icon, family=o["font"], weight=o["weight"], align=o["align"], size=o["size"],
     )
 
 
@@ -391,6 +396,7 @@ def render_item_price(ctx: Ctx, box: Box, o: dict) -> None:
     Option("name", "text", "Divine Orb", "Item or tab name"),
     Option("label", "text", "", "Label (empty = the name, '-' = none)"),
     Option("icon", "bool", True, "Divine icon"),
+    Option("size", "int", 0, "Size (0 = fit the slot)", minimum=0, maximum=150),
     Option("align", "choice", "left", "Alignment", choices=["left", "center", "right"]),
     *_font_options(color=WHITE),
 ])
@@ -408,6 +414,7 @@ def render_stack_value(ctx: Ctx, box: Box, o: dict) -> None:
         main=fmt_amount(value) if value is not None else "--",
         sub=sub, color=color_for(o["color"], ctx.data, None), sub_color=MUTED,
         icon="Divine Orb" if o["icon"] else None, family=o["font"], weight=o["weight"], align=o["align"],
+        size=o["size"],
     )
 
 
@@ -433,6 +440,7 @@ def render_text(ctx: Ctx, box: Box, o: dict) -> None:
 @widget("clock", "Clock", "The time, optionally with the date.", [
     Option("hours", "choice", "24h", "Format", choices=["24h", "12h"]),
     Option("date", "bool", True, "Show the date"),
+    Option("size", "int", 0, "Size (0 = fit the slot)", minimum=0, maximum=150),
     Option("align", "choice", "center", "Alignment", choices=["left", "center", "right"]),
     *_font_options(color=WHITE),
 ], frame="none")
@@ -442,7 +450,7 @@ def render_clock(ctx: Ctx, box: Box, o: dict) -> None:
     value_block(
         ctx, box, label="", main=main, sub=now.strftime("%A %d %B") if o["date"] else "",
         color=color_for(o["color"], ctx.data, None), sub_color=MUTED, icon=None,
-        family=o["font"], weight=o["weight"], align=o["align"],
+        family=o["font"], weight=o["weight"], align=o["align"], size=o["size"],
     )
 
 

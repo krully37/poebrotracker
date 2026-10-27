@@ -103,7 +103,7 @@ Decided 2026-10-27.
 - League, intervals, poe.ninja items, and Start with Windows.
 
 **Backgrounds in this step**
-- Upload, crop and convert images, GIFs and videos. The preview shows a still frame. The animated preview comes with the firmware media step, once the real frame rate is known.
+- Upload, crop and convert images, GIFs and videos. The preview shows a still frame. The animated preview comes with the firmware media step, once the real frame rate is known. The browser extracts a video's still frame, so the settings page itself needs no ffmpeg; ffmpeg only comes in with the MJPEG conversion.
 
 **Tech**
 - **Flask** served by **Waitress** (stable, pure Python, works well on Windows), plus **Alpine.js** bundled as a file (no CDN, no build step).

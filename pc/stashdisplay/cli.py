@@ -1,5 +1,10 @@
 """Command line entry point.
 
+    stashdisplay run [--no-tray] [--offline]
+        Start the app: settings page on 127.0.0.1 and the tray icon. The settings page
+        opens by itself on the first start. If a copy is already running, its settings
+        page is opened instead.
+
     stashdisplay preview [--out DIR] [--scale N] [--seed N] [--offline]
         Render every page with demo data to PNG files (no screen, no WealthyExile needed).
         Downloads game icons and the Fontin font into the local cache the first time,
@@ -7,11 +12,14 @@
 """
 
 import argparse
+import logging
+import logging.handlers
 import sys
 import time
 from pathlib import Path
 
 from . import pages as pagelib
+from . import paths
 from .assets import AssetCache
 from .history import History
 from .render import data as renderdata
@@ -65,9 +73,54 @@ def cmd_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def setup_logging() -> None:
+    handler = logging.handlers.RotatingFileHandler(paths.log_path(), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+    if sys.stderr:  # None in the windowed .exe
+        root.addHandler(logging.StreamHandler())
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    from . import tray
+    from .app import App
+    from .web import server
+
+    setup_logging()
+    first_start = not paths.settings_path().exists()
+    app = App.create(offline=args.offline)
+    try:
+        web_server = server.serve_in_background(app)
+    except OSError:
+        # Most likely another copy is running: show its settings page and leave.
+        logging.info("settings port busy, opening the running copy")
+        tray.open_settings(app)
+        return 0
+    logging.info("settings page on %s", server.url(app).split("?")[0])
+    if first_start:
+        tray.open_settings(app)
+    if args.no_tray:
+        print(f"Settings page: {server.url(app)}  (Ctrl+C to stop)")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+    else:
+        tray.run(app, web_server)
+    web_server.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="stashdisplay")
     sub = parser.add_subparsers(dest="command", required=True)
+    r = sub.add_parser("run", help="start the app (settings page and tray icon)")
+    r.add_argument("--no-tray", action="store_true", help="no tray icon; print the settings address and wait")
+    r.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
+    r.set_defaults(func=cmd_run)
     p = sub.add_parser("preview", help="render all pages with demo data to PNG files")
     p.add_argument("--out", default="preview", help="output folder (default: ./preview)")
     p.add_argument("--scale", type=int, default=1, help="also write N-times enlarged copies")

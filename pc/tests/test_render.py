@@ -66,7 +66,7 @@ def test_normalize_fills_defaults_and_drops_junk():
     assert page["slots"]["col1"]["quantity"] is True
     assert page["slots"]["col2"] is None
     assert set(page["slots"]) == {"col1", "col2"}
-    assert page["background"] == {"kind": "color", "value": "#000000"}
+    assert page["background"] == {"kind": "color", "value": "#000000", "fit": "cover", "x": 50, "y": 50}
     assert page["header"] == {"title": True, "clock": True, "synced": True}
 
 

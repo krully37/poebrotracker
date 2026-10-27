@@ -5,10 +5,14 @@
 - `preview`: background + overlay + pagination dots, exactly what the screen will display.
 """
 
+from collections.abc import Callable
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image
+
+from ..media import compose_background
 
 from . import draw, frames
 from .data import RenderData, fmt_duration
@@ -73,23 +77,25 @@ def overlay(page: dict, data: RenderData, show_empty_slots: bool = False) -> Ima
     return ctx.img
 
 
-def background(page: dict, media_dir: Path | None = None) -> Image.Image:
+def background(page: dict, still_for: Callable[[str], Path | None] | None = None) -> Image.Image:
+    """The page background as the screen shows it; GIF and video show their first frame."""
     bg = page["background"]
     if bg["kind"] == "color":
         return Image.new("RGB", (WIDTH, HEIGHT), bg.get("value") or BACKGROUND)
-    path = Path(bg.get("value") or "")
-    if media_dir is not None and not path.is_absolute():
-        path = media_dir / path
-    if bg["kind"] in ("image", "gif") and path.is_file():
-        with Image.open(path) as im:
-            im.seek(0)
-            # Cover the screen and crop the overflow, like a CSS background-size: cover.
-            return ImageOps.fit(im.convert("RGB"), (WIDTH, HEIGHT), Image.Resampling.LANCZOS)
-    # Video frames are not decoded yet; show a placeholder so the layout can still be judged.
+    path = still_for(bg.get("value") or "") if still_for else None
+    if path is not None:
+        return _composed(str(path), path.stat().st_mtime, bg["fit"], bg["x"], bg["y"]).copy()
+    # No still yet (missing file, or a video whose first frame is not extracted yet).
     img = Image.new("RGB", (WIDTH, HEIGHT), "#101216")
     ctx = Ctx(img.convert("RGBA"), None)  # type: ignore[arg-type]
     draw.text_in(ctx, Box(0, 0, WIDTH, HEIGHT), f"{bg['kind']} background", font("Inter", 14, 500), FAINT, "center")
     return ctx.img.convert("RGB")
+
+
+@lru_cache(maxsize=32)
+def _composed(path: str, mtime: float, fit: str, x: int, y: int) -> Image.Image:
+    with Image.open(path) as im:
+        return compose_background(im, fit, x, y)
 
 
 def dots(img: Image.Image, index: int, count: int) -> None:
@@ -110,8 +116,9 @@ def dots(img: Image.Image, index: int, count: int) -> None:
         draw.paint(ctx, color, lambda d, cx=cx: d.ellipse(((cx - r) * k, (DOTS_Y - r) * k, (cx + r) * k, (DOTS_Y + r) * k), fill=255), smooth=True)
 
 
-def preview(page: dict, data: RenderData, index: int, count: int, media_dir: Path | None = None) -> Image.Image:
-    img = background(page, media_dir).convert("RGBA")
+def preview(page: dict, data: RenderData, index: int, count: int,
+            still_for: Callable[[str], Path | None] | None = None) -> Image.Image:
+    img = background(page, still_for).convert("RGBA")
     img.alpha_composite(overlay(page, data))
     dots(img, index, count)
     return img.convert("RGB")

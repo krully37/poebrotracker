@@ -12,6 +12,18 @@ python3 -m venv .venv
 
 On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\python` instead.
 
+## Run the app
+
+```bash
+.venv/bin/python -m stashdisplay run
+```
+
+This starts the settings page on `127.0.0.1` and a tray icon (click it, or right-click → Open settings). The settings page opens by itself on the first start. Starting a second copy only opens the settings of the running one. Add `--no-tray` to print the settings address in the terminal instead, and `--offline` to skip downloads.
+
+The settings, pages, uploaded backgrounds and log live in `%APPDATA%\stashdisplay` on Windows and `~/Library/Application Support/stashdisplay` on macOS. Set `STASHDISPLAY_HOME` to use another folder, for example a throwaway one while testing.
+
+The page is only reachable from this PC. It needs the per-install token, which the tray link carries once and a cookie keeps afterwards, so other websites open in the browser cannot read or change it.
+
 ## Preview the pages with demo data
 
 ```bash
@@ -40,3 +52,10 @@ The first run downloads the game icons and the Fontin font into the local cache 
 | `assets.py` | Downloads and caches game icons (via poe.ninja) and Fontin |
 | `render/frames.py` | PoE tooltip-style frames and the page header bar |
 | `sources/` | Data sources: `demo.py` now, WealthyExile and poe.ninja later |
+| `settings.py` | `settings.json`: settings, pages, the sealed cookie, the page token |
+| `vault.py` | Cookie encryption (Windows DPAPI; base64 + owner-only file elsewhere) |
+| `media.py` | Uploaded backgrounds: images, GIFs, videos and their still frames |
+| `app.py` | The running app shared by the settings page and the tray |
+| `web/` | Settings page: Flask API (`server.py`) and the Alpine.js editor (`static/`) |
+| `tray.py` | Tray icon and menu |
+| `autostart.py` | "Start with Windows" (registry Run key) |

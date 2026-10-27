@@ -21,8 +21,9 @@ from .render.theme import BACKGROUND
 from .render.widgets import FRAMES, WIDGETS
 
 DEFAULT_HEADER = {"title": True, "clock": True, "synced": True}
-DEFAULT_BACKGROUND = {"kind": "color", "value": BACKGROUND}
+DEFAULT_BACKGROUND = {"kind": "color", "value": BACKGROUND, "fit": "cover", "x": 50, "y": 50}
 BACKGROUND_KINDS = ["color", "image", "gif", "video"]
+BACKGROUND_FITS = ["cover", "contain"]
 
 
 def normalize_slot(slot: dict | None) -> dict | None:
@@ -53,6 +54,13 @@ def normalize_page(page: dict) -> dict:
     background = {**DEFAULT_BACKGROUND, **(page.get("background") or {})}
     if background["kind"] not in BACKGROUND_KINDS:
         background = dict(DEFAULT_BACKGROUND)
+    if background["fit"] not in BACKGROUND_FITS:
+        background["fit"] = "cover"
+    for axis in ("x", "y"):
+        try:
+            background[axis] = min(100, max(0, int(background[axis])))
+        except (TypeError, ValueError):
+            background[axis] = 50
     return {
         "id": str(page.get("id") or uuid.uuid4().hex[:8]),
         "name": str(page.get("name") or "Page"),

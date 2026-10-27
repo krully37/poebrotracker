@@ -1,0 +1,256 @@
+"""The settings page: a Flask app served on 127.0.0.1 only.
+
+Protection against other websites open in the same browser:
+- the Host header must be 127.0.0.1/localhost on our port (blocks DNS rebinding);
+- every page and API call needs the per-install token, given once in the URL
+  opened from the tray and then kept in a SameSite=Strict, HttpOnly cookie;
+- requests that change something must carry a custom header, which a foreign
+  site cannot send without a CORS preflight that we never allow.
+"""
+
+import hmac
+import logging
+import threading
+from pathlib import Path
+
+from flask import Flask, Response, abort, jsonify, redirect, request, send_file
+
+from .. import autostart
+from .. import pages as pagelib
+from ..app import App
+from ..media import MediaError
+from ..render.data import METRICS
+from ..render.fonts import BUNDLED, FALLBACK
+from ..render.templates import HEADER_BOX, TEMPLATES
+from ..render.theme import HEIGHT, WIDTH
+from ..render.widgets import FRAMES, WIDGETS
+from ..settings import LANGUAGES
+
+log = logging.getLogger(__name__)
+
+STATIC = Path(__file__).with_name("static")
+COOKIE = "sd_token"
+WRITE_HEADER = "X-Stashdisplay"
+PLACEHOLDERS = ["total", "rate", "session", "today", "best_hour", "league_gain", "div_price",
+                "league", "time", "date", "session_since", "session_duration", "synced"]
+
+
+def schema() -> dict:
+    """Everything the editor needs to build its forms, taken from the Python definitions."""
+    return {
+        "screen": {"width": WIDTH, "height": HEIGHT, "header": list(HEADER_BOX)},
+        "templates": [
+            {"id": t.id, "name": t.name, "description": t.description,
+             "slots": {name: list(box) for name, box in t.slots.items()}}
+            for t in TEMPLATES.values()
+        ],
+        "widgets": [
+            {"id": w.id, "name": w.name, "description": w.description, "frame": w.frame,
+             "options": [o.__dict__ for o in w.options]}
+            for w in WIDGETS.values()
+        ],
+        "metrics": [{"id": m.id, "label": m.label, "kind": m.kind} for m in METRICS.values()],
+        "fonts": [*BUNDLED, *FALLBACK],
+        "frames": FRAMES,
+        "background_kinds": pagelib.BACKGROUND_KINDS,
+        "background_fits": pagelib.BACKGROUND_FITS,
+        "placeholders": PLACEHOLDERS,
+        "languages": LANGUAGES,
+    }
+
+
+def create_app(app: App) -> Flask:
+    web = Flask(__name__, static_folder=str(STATIC), static_url_path="/static")
+    web.config["MAX_CONTENT_LENGTH"] = 310 * 1024 * 1024  # videos up to 300 MB
+    store = app.store
+
+    def port() -> int:
+        return store.settings["web"]["port"]
+
+    @web.before_request
+    def guard():
+        allowed_hosts = {f"127.0.0.1:{port()}", f"localhost:{port()}"}
+        if web.testing:
+            allowed_hosts.add("localhost")
+        if request.host not in allowed_hosts:
+            abort(403)
+        if request.path.startswith("/static/") or request.path == "/":
+            return None
+        if not hmac.compare_digest(request.cookies.get(COOKIE, ""), store.token):
+            abort(403)
+        if request.method not in ("GET", "HEAD"):
+            if request.headers.get(WRITE_HEADER) != "1":
+                abort(403)
+            origin = request.headers.get("Origin")
+            if origin and origin.split("://", 1)[-1] not in allowed_hosts:
+                abort(403)
+        return None
+
+    @web.after_request
+    def no_cache(resp: Response) -> Response:
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["X-Frame-Options"] = "DENY"
+        return resp
+
+    @web.get("/")
+    def index():
+        token = request.args.get("token")
+        if token is not None:
+            if not hmac.compare_digest(token, store.token):
+                abort(403)
+            resp = redirect("/")  # drop the token from the address bar
+            resp.set_cookie(COOKIE, store.token, httponly=True, samesite="Strict")
+            return resp
+        if not hmac.compare_digest(request.cookies.get(COOKIE, ""), store.token):
+            return send_file(STATIC / "locked.html")
+        return send_file(STATIC / "index.html")
+
+    # --- State and saving --------------------------------------------------------
+
+    def state() -> dict:
+        return {
+            "settings": store.settings,
+            "pages": store.pages,
+            "has_cookie": bool(store.cookie),
+            "media": app.media.list(),
+            "status": app.status,
+            "live": app.live_data is not None,
+            "autostart": {"supported": autostart.supported(), "enabled": autostart.enabled()},
+        }
+
+    @web.get("/api/state")
+    def get_state():
+        return jsonify({**state(), "schema": schema()})
+
+    @web.post("/api/save")
+    def save():
+        body = request.get_json(force=True) or {}
+        app.save(body.get("settings"), body.get("pages"))
+        return jsonify(state())
+
+    @web.post("/api/normalize")
+    def normalize():
+        """Clean pages coming from an imported file before the editor uses them."""
+        body = request.get_json(force=True) or {}
+        pages = body.get("pages") if isinstance(body.get("pages"), list) else []
+        return jsonify({"pages": [pagelib.normalize_page(p) for p in pages if isinstance(p, dict)]})
+
+    @web.get("/api/preset")
+    def preset():
+        return jsonify({"pages": pagelib.preset()})
+
+    # --- Preview -------------------------------------------------------------------
+
+    @web.post("/api/preview")
+    def preview():
+        body = request.get_json(force=True) or {}
+        page = pagelib.normalize_page(body.get("page") or {})
+        png, is_demo = app.preview_png(page, int(body.get("index", 0)), int(body.get("count", 1)),
+                                       force_demo=bool(body.get("demo")))
+        resp = Response(png, mimetype="image/png")
+        resp.headers["X-Demo-Data"] = "1" if is_demo else "0"
+        return resp
+
+    # --- Cookie --------------------------------------------------------------------
+
+    @web.post("/api/cookie")
+    def set_cookie():
+        body = request.get_json(force=True) or {}
+        store.cookie = str(body.get("cookie", "")).strip()
+        store.save()
+        return jsonify({"has_cookie": bool(store.cookie)})
+
+    @web.post("/api/cookie/test")
+    def test_cookie():
+        # The WealthyExile adapter comes with the reverse-engineering step.
+        return jsonify({"ok": False, "code": "not_implemented"})
+
+    # --- Items and icons -----------------------------------------------------------
+
+    @web.get("/api/items")
+    def items():
+        return jsonify({"items": app.assets.item_names(request.args.get("q", ""))})
+
+    @web.get("/api/icon")
+    def icon():
+        path = app.assets.icon(request.args.get("name", ""))
+        if path is None:
+            abort(404)
+        return send_file(path, mimetype="image/png")
+
+    @web.get("/api/font/<name>")
+    def fontin(name: str):
+        """Fontin from the local cache, so the settings page can use the game font too."""
+        files = app.assets.fontin()
+        if name not in files:
+            abort(404)
+        return send_file(files[name], mimetype="font/ttf")
+
+    # --- Media ---------------------------------------------------------------------
+
+    @web.post("/api/media")
+    def upload():
+        file = request.files.get("file")
+        if file is None:
+            abort(400)
+        try:
+            return jsonify(app.media.add(file.filename or "upload", file.read()))
+        except MediaError as e:
+            return jsonify({"error": str(e)}), 400
+
+    @web.post("/api/media/<media_id>/still")
+    def media_still(media_id: str):
+        try:
+            return jsonify(app.media.set_still(media_id, request.get_data()))
+        except MediaError as e:
+            return jsonify({"error": str(e)}), 400
+
+    @web.get("/api/media/<media_id>/thumb")
+    def media_thumb(media_id: str):
+        try:
+            png = app.media.thumbnail(media_id)
+        except MediaError:
+            png = None
+        if png is None:
+            abort(404)
+        return Response(png, mimetype="image/png")
+
+    @web.delete("/api/media/<media_id>")
+    def media_delete(media_id: str):
+        in_use = [p["name"] for p in store.pages
+                  if p["background"]["kind"] != "color" and p["background"]["value"] == media_id]
+        if in_use:
+            return jsonify({"error": "in_use", "pages": in_use}), 409
+        try:
+            app.media.delete(media_id)
+        except MediaError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"media": app.media.list()})
+
+    # --- Windows autostart ----------------------------------------------------------
+
+    @web.post("/api/autostart")
+    def set_autostart():
+        if not autostart.supported():
+            return jsonify({"error": "unsupported"}), 400
+        autostart.set_enabled(bool((request.get_json(force=True) or {}).get("enabled")))
+        return jsonify({"supported": True, "enabled": autostart.enabled()})
+
+    return web
+
+
+def url(app: App) -> str:
+    """The address the tray opens: it carries the token once, then the cookie takes over."""
+    return f"http://127.0.0.1:{app.store.settings['web']['port']}/?token={app.store.token}"
+
+
+def serve_in_background(app: App):
+    """Start the settings page on a background thread and return the server (close() stops it).
+
+    Binding happens here, so a port already in use (another copy running) raises OSError now.
+    """
+    from waitress import create_server
+
+    server = create_server(create_app(app), host="127.0.0.1", port=app.store.settings["web"]["port"], threads=4)
+    threading.Thread(target=server.run, daemon=True, name="settings-page").start()
+    return server

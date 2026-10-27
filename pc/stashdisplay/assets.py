@@ -89,6 +89,11 @@ def _icons_from(payload: dict) -> dict[str, str]:
     return icons
 
 
+def _names_from(payload: dict) -> list[str]:
+    rows = payload.get("currencyDetails", []) + payload.get("items", []) + payload.get("lines", [])
+    return [r["name"] for r in rows if r.get("name")]
+
+
 class AssetCache:
     def __init__(self, root: Path | None = None, offline: bool = False):
         self.root = root or paths.app_dir() / "cache"
@@ -96,6 +101,7 @@ class AssetCache:
         self.http = requests.Session()
         self.http.headers["User-Agent"] = USER_AGENT
         self._index: dict[str, str] | None = None
+        self._names: dict[str, str] = {}
 
     # --- Icons ---------------------------------------------------------------
 
@@ -116,18 +122,33 @@ class AssetCache:
             except requests.RequestException as e:
                 log.warning("Could not refresh the icon index: %s", e)
         self._index = cached.get("icons", {})
+        self._names = cached.get("names", {})
         return self._index
+
+    def item_names(self, query: str, limit: int = 20) -> list[str]:
+        """Item names containing `query` (case-insensitive), for the settings page's item picker."""
+        self.icon_index()
+        q = query.strip().lower()
+        if not q:
+            return []
+        hits = [self._names.get(k, k.title()) for k in self._index if q in k]
+        hits.sort(key=lambda n: (not n.lower().startswith(q), len(n), n))
+        return hits[:limit]
 
     def _fetch_index(self) -> dict:
         league = self.http.get(f"{NINJA}/leagues", timeout=15).json()[0]["id"]
         icons: dict[str, str] = {}
+        names: dict[str, str] = {}
         for endpoint, kind in ICON_SOURCES:
             r = self.http.get(f"{NINJA}/{endpoint}/overview", params={"league": league, "type": kind}, timeout=30)
             if r.ok:
-                for name, url in _icons_from(r.json()).items():
+                payload = r.json()
+                for name, url in _icons_from(payload).items():
                     icons.setdefault(name, url)
+                for original in _names_from(payload):
+                    names.setdefault(original.lower(), original)
             time.sleep(0.5)  # be gentle: this runs about once a week
-        data = {"fetched": time.time(), "league": league, "icons": icons}
+        data = {"fetched": time.time(), "league": league, "icons": icons, "names": names}
         self.root.mkdir(parents=True, exist_ok=True)
         self.index_path.write_text(json.dumps(data), encoding="utf-8")
         log.info("Icon index refreshed: %d items (%s)", len(icons), league)

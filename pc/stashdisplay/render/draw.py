@@ -39,16 +39,24 @@ def paint(ctx: Ctx, color: str, draw_mask: Callable[[ImageDraw.ImageDraw], None]
     callback are then in 4x space.
     """
     scale = SUPERSAMPLE if smooth else 1
-    size = (ctx.img.width * scale, ctx.img.height * scale)
-    mask = Image.new("L", size, 0)
+    width, height = ctx.img.size
+    mask = Image.new("L", (width * scale, height * scale), 0)
     draw_mask(ImageDraw.Draw(mask))
+    bbox = mask.getbbox()
+    if bbox is None:
+        return
+    # Only the area actually drawn is scaled, colored and composited: much faster
+    # than working on the whole screen for every piece of text.
+    x0, y0 = max(0, bbox[0] // scale - 1), max(0, bbox[1] // scale - 1)
+    x1, y1 = min(width, -(-bbox[2] // scale) + 1), min(height, -(-bbox[3] // scale) + 1)
+    mask = mask.crop((x0 * scale, y0 * scale, x1 * scale, y1 * scale))
     if smooth:
-        mask = mask.resize(ctx.img.size, Image.Resampling.LANCZOS)
+        mask = mask.resize((x1 - x0, y1 - y0), Image.Resampling.LANCZOS)
     if alpha < 255:
         mask = mask.point(lambda p: p * alpha // 255)
-    layer = Image.new("RGBA", ctx.img.size, rgba(color, 0))
+    layer = Image.new("RGBA", mask.size, rgba(color, 0))
     layer.putalpha(mask)
-    ctx.img.alpha_composite(layer)
+    ctx.img.alpha_composite(layer, (x0, y0))
 
 
 def text(ctx: Ctx, xy: tuple[float, float], s: str, f: ImageFont.FreeTypeFont, color: str, anchor: str = "ls") -> None:
