@@ -50,6 +50,22 @@ def test_more_colours_than_the_palette_never_turn_transparent():
         assert max(hi for _, hi in ImageChops.difference(want, got).getextrema()) < 64
 
 
+def test_see_through_frames_are_whole_and_show_the_page_where_clear():
+    # A red square that moves right: where it was, the page must show again (no delta trick).
+    frames = []
+    for x in (0, 100):
+        f = Image.new("RGBA", (W, H))
+        ImageDraw.Draw(f).rectangle((x, 100, x + 60, 160), fill=(255, 0, 0, 255))
+        frames.append(f)
+    data = gif.encode(frames, [100, 100], see_through=True)
+    with Image.open(io.BytesIO(data)) as im:
+        im.seek(1)
+        assert im.disposal_method == 2
+    decoded = _decode_frames(data)
+    for want, (got, _) in zip(frames, decoded):
+        assert got.mode == "RGBA" and ImageChops.difference(want, got).getbbox() is None
+
+
 def test_screen_gifs_use_the_encoder(tmp_path):
     frames = scene(20)
     src = tmp_path / "in.gif"

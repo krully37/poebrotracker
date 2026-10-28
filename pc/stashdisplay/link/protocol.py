@@ -28,7 +28,7 @@ BEGIN = 0x03  # {"xfer", "kind": "overlay"|"file"|"toast", "id", "size", "crc", 
 CHUNK = 0x04  # binary: xfer u16, offset u32, data
 END = 0x05  # {"xfer"}: the screen checks size and CRC, then stores the blob
 DELETE = 0x06  # {"id"}: delete a file from flash
-PLAY = 0x07  # {"file"?, "overlay"?, "seconds"}: full-screen event animation
+PLAY = 0x07  # {"file"?, "overlay"?, "seconds", "over_page"?}: event animation, full screen or over the page
 PING = 0x08  # {}: heartbeat
 EVENT_ACK = 0x09  # seq = the EVENT being acknowledged
 
@@ -241,6 +241,7 @@ RING_FILL = 1.5  # s for the ring to close; lifting earlier cancels
 RING_RADIUS = 30
 SLIDE_SECONDS = 0.28
 DIM_LEVEL = 0.3  # backlight while the PC is away
+EVENT_DIM = 0.4  # brightness of the page under an over-the-page event animation
 FLASH_BYTES = 11 * 1024 * 1024  # file storage on the screen (§5 of the scope)
 # The start animation, played at power-on without the PC: a GIF plays once, looping until
 # ANIM_MIN_SECONDS if shorter and cut at ANIM_MAX_SECONDS; an image shows for STILL_SECONDS.

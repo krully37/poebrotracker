@@ -2,13 +2,14 @@ import io
 import os
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops, ImageEnhance
 
 from stashdisplay import gamelog
 from stashdisplay.app import App
 from stashdisplay.assets import AssetCache
 from stashdisplay.gamelog import Characters, GameEvent, LogWatcher, parse
 from stashdisplay.link import content as contentlib
+from stashdisplay.link import protocol as p
 from stashdisplay.link.simulator import SimRunner, SimScreen
 from stashdisplay.link.transport import LoopbackPair
 from stashdisplay.media import MediaStore
@@ -151,6 +152,39 @@ def _png() -> bytes:
     return buf.getvalue()
 
 
+def see_through_gif() -> bytes:
+    """90×160 (a portrait cutout, like the death cat): top half see-through, bottom half red,
+    then blue (two different frames, or the GIF counts as a still image)."""
+    frames = []
+    for colour in (0, 1):
+        f = Image.new("P", (90, 160), 255)
+        f.putpalette([255, 0, 0, 0, 0, 255] + [0, 0, 0] * 254)
+        f.paste(colour, (0, 80, 90, 160))
+        frames.append(f)
+    buf = io.BytesIO()
+    frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:], duration=500, loop=0,
+                   transparency=255, disposal=2)
+    return buf.getvalue()
+
+
+def test_see_through_gif_is_fitted_in_the_bottom_right_corner(tmp_path):
+    media = MediaStore(tmp_path / "m")
+    builder = contentlib.ContentBuilder(media)
+    _, f, _ = builder.animation("death", media.add("cat.gif", see_through_gif())["id"])
+    assert f.over_page
+    with Image.open(io.BytesIO(f.data)) as im:
+        first = im.convert("RGBA")
+    # Scaled to the screen's height (180×320) and pushed against the right edge.
+    assert first.size == (480, 320)
+    assert first.getpixel((100, 300))[3] == 0  # left of the cat: the page shows
+    assert first.getpixel((400, 50))[3] == 0  # the see-through top half
+    assert first.getpixel((400, 300)) == (255, 0, 0, 255)
+    assert first.getpixel((305, 300)) == (255, 0, 0, 255)
+    # An opaque GIF still fills the screen.
+    _, opaque, _ = builder.animation("levelup", media.add("x.gif", gif(1.0))["id"])
+    assert not opaque.over_page
+
+
 @pytest.fixture
 def screen_app(tmp_path, monkeypatch):
     monkeypatch.setattr(contentlib, "ANIM_DIR", tmp_path / "anims")
@@ -230,7 +264,7 @@ def test_start_animation_plays_when_the_pc_connects(start_rig):
     wait_for(lambda: sim.anim is not None and sim.anim[0] == "boot")
     # Game start uses the same cat: one copy on the screen, played from the boot file.
     assert "boot" in sim.files and not any(k.startswith("anim-launch") for k in sim.files)
-    assert app.anim_files["launch"] == ("boot", 4.0)
+    assert app.anim_files["launch"] == ("boot", 4.0, False)
     sim.anim = None
     app.on_game_event(GameEvent("launch", ""))
     wait_for(lambda: sim.anim is not None and sim.anim[0] == "boot")
@@ -269,3 +303,20 @@ def test_screen_start_turned_off_leaves_the_screen(start_rig):
     app.start_link(lambda: [pair.pc] if pair.plugged else [])
     wait_for(lambda: app.link.state == "connected" and any(k.startswith("anim-launch") for k in sim.files))
     assert "boot" not in sim.files and sim.anim is None  # game start keeps its own copy
+
+
+def test_see_through_gif_plays_over_the_dimmed_page(screen_app):
+    app, sim, _ = screen_app
+    upload = app.media.add("cat.gif", see_through_gif())
+    app.save({**app.store.settings, "events": {**app.store.settings["events"],
+                                               "death": {"enabled": True, "media": upload["id"]}}}, None)
+    wait_for(lambda: app.anim_files.get("death", (None, 0, False))[2] and app.anim_files["death"][0] in sim.files)
+    page = sim.frame()
+    app.on_game_event(GameEvent("death", "Krully"))
+    wait_for(lambda: sim.anim is not None and sim.anim[4])
+    shown = sim.frame()
+    # The page, dimmed, wherever the GIF is see-through; the GIF where it is not.
+    dimmed = ImageEnhance.Brightness(page).enhance(p.EVENT_DIM)
+    for box in ((0, 0, 300, 320), (300, 0, 480, 160)):
+        assert max(hi for _, hi in ImageChops.difference(shown.crop(box), dimmed.crop(box)).getextrema()) <= 1
+    assert shown.getpixel((400, 300)) in ((255, 0, 0), (0, 0, 255))

@@ -42,6 +42,7 @@ class PageContent:
 class FileContent:
     data: bytes
     format: str  # "jpeg" or "gif" (later "mjpeg")
+    over_page: bool = False  # an event GIF with see-through pixels, played over the current page
 
     @property
     def crc(self) -> str:
@@ -94,11 +95,11 @@ class ScreenLink:
     def toast(self, overlay: bytes, seconds: float = 2.0) -> None:
         self.jobs.put(("toast", overlay, seconds))
 
-    def play(self, file_id: str | None, overlay: bytes | None, seconds: float) -> bool:
+    def play(self, file_id: str | None, overlay: bytes | None, seconds: float, over_page: bool = False) -> bool:
         """Play an event animation now. Dropped (False) while the screen is away: old news by then."""
         if self.state == "searching":
             return False
-        self.jobs.put(("play", file_id, overlay, seconds))
+        self.jobs.put(("play", file_id, overlay, seconds, over_page))
         return True
 
     def has_file(self, file_id: str) -> bool:
@@ -177,10 +178,13 @@ class ScreenLink:
         elif kind == "toast":
             self._transfer("toast", "@toast", job[1], seconds=job[2])
         elif kind == "play":
-            _, file_id, overlay, seconds = job
+            _, file_id, overlay, seconds, over_page = job
             if overlay is not None:
                 self._transfer("overlay", "@event", overlay)
-            self._request(p.PLAY, {"file": file_id, "overlay": "@event" if overlay else None, "seconds": seconds})
+            msg = {"file": file_id, "overlay": "@event" if overlay else None, "seconds": seconds}
+            if over_page:
+                msg["over_page"] = True
+            self._request(p.PLAY, msg)
 
     # --- Sync --------------------------------------------------------------------------------
 

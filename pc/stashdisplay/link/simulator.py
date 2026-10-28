@@ -43,14 +43,15 @@ class SimScreen:
             self.last_reply: tuple[int, int, bytes] | None = None  # (type, seq, frame) for resends
             self.slide: tuple[int, int, float] | None = None  # (from, to, start)
             self.toast: tuple[str, float] | None = None  # (overlay id, until)
-            self.anim: tuple[str | None, str | None, float, float] | None = None  # (file, overlay, start, until)
+            # (file, overlay, start, until, over the page)
+            self.anim: tuple[str | None, str | None, float, float, bool] | None = None
             self.touch: dict | None = None
             self.event_seq = 0
             self.pending_events: dict[int, tuple[bytes, float, int]] = {}  # seq -> (frame, sent, tries)
             self.decoded: dict[str, Image.Image] = {}
             boot = self.files.get(p.BOOT_FILE)
             if boot:
-                self.anim = (p.BOOT_FILE, None, self.clock(), self.clock() + _duration(boot))
+                self.anim = (p.BOOT_FILE, None, self.clock(), self.clock() + _duration(boot), False)
 
     def flash_used(self) -> int:
         return sum(f["size"] for f in self.files.values())
@@ -132,7 +133,7 @@ class SimScreen:
             return {"ok": True, "flash_free": self.flash_bytes - self.flash_used()}
         if t == p.PLAY:
             seconds = float(msg.get("seconds", 4))
-            self.anim = (msg.get("file"), msg.get("overlay"), now, now + seconds)
+            self.anim = (msg.get("file"), msg.get("overlay"), now, now + seconds, bool(msg.get("over_page")))
             return {"ok": True}
         return {"ok": False, "error": "unknown_type"}
 
@@ -267,8 +268,16 @@ class SimScreen:
         with self.lock:
             now = self.clock()
             if self.anim:
-                file_id, overlay_id, start, _ = self.anim
-                img = self._file_frame(file_id, now - start) if file_id else Image.new("RGB", (WIDTH, HEIGHT))
+                file_id, overlay_id, start, _, over_page = self.anim
+                if over_page and self.pages:
+                    # The page as it was, dimmed; the GIF's see-through pixels show it.
+                    img = self._page_image(self.current, now).convert("RGBA")
+                    renderer.dots(img, self.current, len(self.pages))
+                    img = ImageEnhance.Brightness(img.convert("RGB")).enhance(p.EVENT_DIM)
+                else:
+                    img = Image.new("RGB", (WIDTH, HEIGHT))
+                if file_id:
+                    img = _over(img, self._file_frame(file_id, now - start))
                 img = self._with_overlay(img, overlay_id)
                 return img if self.online(now) or file_id == "boot" else _dim(img)
             if not self.online(now) or not self.pages:
@@ -352,16 +361,28 @@ def _holds(zone: dict | None) -> bool:
 
 
 def _decode_frames(data: bytes) -> list[tuple[Image.Image, int]]:
-    """Every frame of a JPEG or GIF file, with its duration in ms, sized for the screen."""
+    """Every frame of a JPEG or GIF file, with its duration in ms, sized for the screen.
+    Frames with see-through pixels stay RGBA."""
     with Image.open(io.BytesIO(data)) as im:
         frames = []
         for i in range(getattr(im, "n_frames", 1)):
             im.seek(i)
-            frame = im.convert("RGB")
+            frame = im.convert("RGBA")
+            if frame.getchannel("A").getextrema()[0] == 255:
+                frame = frame.convert("RGB")
             if frame.size != (WIDTH, HEIGHT):
                 frame = frame.resize((WIDTH, HEIGHT))
             frames.append((frame, max(20, int(im.info.get("duration", 100)))))
         return frames
+
+
+def _over(base: Image.Image, frame: Image.Image) -> Image.Image:
+    """A file's frame drawn over base: all of it, or only its opaque pixels."""
+    if frame.mode != "RGBA":
+        return frame
+    out = base.convert("RGBA")
+    out.alpha_composite(frame)
+    return out.convert("RGB")
 
 
 def _duration(file: dict) -> float:

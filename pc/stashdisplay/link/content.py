@@ -6,13 +6,13 @@ import hashlib
 import io
 from pathlib import Path
 
-from PIL import Image, ImageSequence
+from PIL import Image, ImageOps, ImageSequence
 
 from .. import pages as pagelib
 from ..media import MediaStore, compose_background
 from ..render import renderer
 from ..render.data import RenderData
-from ..render.theme import BACKGROUND
+from ..render.theme import BACKGROUND, HEIGHT, WIDTH
 from . import gif
 from . import protocol as p
 from .client import Content, FileContent, PageContent
@@ -84,10 +84,11 @@ class ContentBuilder:
         file_id = f"anim-{kind}-" + hashlib.sha1(key.encode()).hexdigest()[:8]
         if file_id not in self.files:
             if is_gif:
-                data = gif_for_screen(source, ANIM_FIT)
+                over_page = see_through(source)
+                data = gif_over_page(source) if over_page else gif_for_screen(source, ANIM_FIT)
                 loops = EVENT_LOOPS.get(kind, 1)
                 self.seconds[file_id] = min(MAX_SECONDS, max(MIN_SECONDS, loops * gif_seconds(data)))
-                self.files[file_id] = FileContent(data, "gif")
+                self.files[file_id] = FileContent(data, "gif", over_page)
             elif still is not None:
                 self.files[file_id] = FileContent(jpeg_for_screen(still, ANIM_FIT), "jpeg")
                 self.seconds[file_id] = STILL_SECONDS
@@ -117,4 +118,24 @@ def gif_for_screen(path: Path, bg: dict) -> bytes:
             frames.append(compose_background(frame, bg["fit"], bg["x"], bg["y"]))
             durations.append(max(20, int(frame.info.get("duration", im.info.get("duration", 100)))))
     return gif.encode(frames, durations)
+
+
+def see_through(path: Path) -> bool:
+    """Whether a GIF has see-through pixels in any frame, as shown (so it plays over the page)."""
+    with Image.open(path) as im:
+        return any(frame.convert("RGBA").getchannel("A").getextrema()[0] < 128 for frame in ImageSequence.Iterator(im))
+
+
+def gif_over_page(path: Path) -> bytes:
+    """A see-through GIF for playing over the page: fitted inside the screen, in the bottom-right
+    corner. GIF pixels are opaque or see-through, nothing in between."""
+    with Image.open(path) as im:
+        frames, durations = [], []
+        for frame in ImageSequence.Iterator(im):
+            fitted = ImageOps.contain(frame.convert("RGBA"), (WIDTH, HEIGHT), Image.Resampling.LANCZOS)
+            layer = Image.new("RGBA", (WIDTH, HEIGHT))
+            layer.paste(fitted, (WIDTH - fitted.width, HEIGHT - fitted.height))
+            frames.append(layer)
+            durations.append(max(20, int(frame.info.get("duration", im.info.get("duration", 100)))))
+    return gif.encode(frames, durations, see_through=True)
 

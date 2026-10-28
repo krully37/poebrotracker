@@ -1,32 +1,46 @@
 """GIF encoding for the screen. Every GIF sent to the screen goes through encode(), which keeps
 files small: one palette for the whole GIF, and each pixel that did not change since the previous
 frame is stored as transparent, so the screen keeps the one it already shows (disposal 1, "do not
-dispose"). Re-encoding every frame in full instead makes a typical animation about 5× bigger."""
+dispose"). Re-encoding every frame in full instead makes a typical animation about 5× bigger.
+
+The exception is a see-through GIF played over the page: there the transparent colour means "the
+page shows here", so no colour is left to mean "unchanged". Each frame is stored whole, with
+disposal 2 ("restore to background"), and the screen draws it on a fresh copy of the page."""
 
 import io
 
 from PIL import Image, ImageChops
 
-UNCHANGED = 255  # palette index for "keep the previous pixel"; the palette has 255 colours
+UNCHANGED = 255  # palette index for "keep the previous pixel" (or "see-through"); the palette has 255 colours
 PALETTE_SAMPLES = 16  # frames the shared palette is built from
 
 
-def encode(frames: list[Image.Image], durations: list[int]) -> bytes:
-    """A looping GIF from same-sized frames, with each frame's duration in ms."""
+def encode(frames: list[Image.Image], durations: list[int], see_through: bool = False) -> bytes:
+    """A looping GIF from same-sized frames, with each frame's duration in ms. With see_through,
+    pixels under half alpha become see-through and every frame is stored whole."""
+    if see_through:
+        clear = [f.convert("RGBA").getchannel("A").point(lambda a: 255 if a < 128 else 0) for f in frames]
     frames = [f.convert("RGB") for f in frames]
     palette = shared_palette(frames)
     # No dithering: it would spread every change into the still pixels around it.
     indexed = [_keep_unchanged_free(f.quantize(palette=palette, dither=Image.Dither.NONE), palette)
                for f in frames]
-    out = [indexed[0]]
-    for prev, cur in zip(indexed, indexed[1:]):
-        same = ImageChops.difference(_indices(cur), _indices(prev)).point(lambda v: 255 if v == 0 else 0)
-        frame = cur.copy()
-        frame.paste(UNCHANGED, mask=same)
-        out.append(frame)
+    if see_through:
+        out = []
+        for frame, mask in zip(indexed, clear):
+            frame = frame.copy()
+            frame.paste(UNCHANGED, mask=mask)
+            out.append(frame)
+    else:
+        out = [indexed[0]]
+        for prev, cur in zip(indexed, indexed[1:]):
+            same = ImageChops.difference(_indices(cur), _indices(prev)).point(lambda v: 255 if v == 0 else 0)
+            frame = cur.copy()
+            frame.paste(UNCHANGED, mask=same)
+            out.append(frame)
     buf = io.BytesIO()
     out[0].save(buf, "GIF", save_all=True, append_images=out[1:], duration=durations, loop=0,
-                transparency=UNCHANGED, disposal=1, optimize=False)
+                transparency=UNCHANGED, disposal=2 if see_through else 1, optimize=False)
     return buf.getvalue()
 
 

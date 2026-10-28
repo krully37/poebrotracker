@@ -55,7 +55,8 @@ class App:
         self.characters = characters or Characters(None)
         self.watcher: LogWatcher | None = None
         self.fake_log = None  # with --simulator: a test Client.txt the simulator page writes to
-        self.anim_files: dict[str, tuple[str, float]] = {}  # event kind -> (screen file id, seconds)
+        # event kind -> (screen file id, seconds, over the page)
+        self.anim_files: dict[str, tuple[str, float, bool]] = {}
         self._playing: tuple[str, float] | None = None  # (event kind, monotonic end)
         self.player: Player | None = None  # what the PC plays, for the media card
 
@@ -136,7 +137,7 @@ class App:
                     if boot and boot.crc == f.crc:
                         file_id = protocol.BOOT_FILE  # the same animation: one copy on the screen
                     content.files[file_id] = f
-                    anim_files[kind] = (file_id, seconds)
+                    anim_files[kind] = (file_id, seconds, f.over_page)
             self.anim_files = anim_files
         return content
 
@@ -206,16 +207,16 @@ class App:
             self.play_event(event.kind, event.name, event.level)
 
     def play_event(self, kind: str, name: str, level: int | None = None, force: bool = False) -> bool:
-        """Full-screen animation for an event. The newest replaces the one playing, except
-        that a level-up never cuts a death short. False when the screen is not there."""
+        """The animation for an event, full screen or over the page. The newest replaces the one
+        playing, except that a level-up never cuts a death short. False when the screen is not there."""
         now = time.monotonic()
         if not force and kind == "levelup" and self._playing and self._playing[0] == "death" and now < self._playing[1]:
             return False
         if not self.link:
             return False
-        file_id, seconds = self.anim_files.get(kind, (None, CARD_SECONDS))
+        file_id, seconds, over_page = self.anim_files.get(kind, (None, CARD_SECONDS, False))
         if file_id and self.link.has_file(file_id):
-            played = self.link.play(file_id, None, seconds)
+            played = self.link.play(file_id, None, seconds, over_page)
         else:
             # No GIF on the screen (none made yet, or no room): large text instead.
             title = {"boot": "Stash Display", "launch": "Path of Exile", "levelup": f"Level {level}"}.get(kind, "Slain")

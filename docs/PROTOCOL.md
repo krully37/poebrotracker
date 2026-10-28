@@ -36,7 +36,7 @@ COBS( type:u8 | seq:u16 LE | payload | crc32:u32 LE ) 0x00
 | 0x04 | CHUNK | PC → screen | binary: `xfer:u16 LE`, `offset:u32 LE`, then data |
 | 0x05 | END | PC → screen | `{"xfer"}`. The screen checks size and CRC, then stores the blob. |
 | 0x06 | DELETE | PC → screen | `{"id"}`: delete a file from flash. The ACK carries `flash_free`. |
-| 0x07 | PLAY | PC → screen | `{"file": id \| null, "overlay": "@event" \| null, "seconds"}`: full-screen event animation. The file loops until `seconds` have passed (black if `file` is null), with the overlay on top. A new PLAY replaces the one playing. |
+| 0x07 | PLAY | PC → screen | `{"file": id \| null, "overlay": "@event" \| null, "seconds", "over_page"?: true}`: event animation. The file loops until `seconds` have passed (black if `file` is null), with the overlay on top. Without `over_page` it fills the screen. With `over_page` the current page (background, overlay and dots) stays underneath, dimmed to **40 %**, and shows wherever the GIF's pixels are see-through. A new PLAY replaces the one playing. |
 | 0x08 | PING | PC → screen | `{}`: heartbeat |
 | 0x09 | EVENT_ACK | PC → screen | empty. The seq is the event's. |
 | 0x81 | ACK | screen → PC | `{"ok": true, ...}` or `{"ok": false, "error": "..."}`. The seq is the request's. |
@@ -71,6 +71,7 @@ The PC compares this with what it wants on the screen and only sends what differ
 - **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations (`launch`, `levelup`, `death`), `boot` the start animation. A sync deletes every file the PC no longer wants, `boot` included (since 2026-10-28 the PC sends it like the others). Animations, `boot` included, are sent after the page list, so the pages show up first. An event whose animation is the same as `boot` gets no file of its own: PLAY names `boot`.
 - **Formats:** `jpeg` and `gif` are 480×320, ready to show. `mjpeg` comes with the video step.
 - **GIF frames are deltas.** After the first frame, a pixel that did not change is stored as the transparent colour, and frames use disposal 1 ("do not dispose"). The screen must draw each frame over the previous one, skipping transparent pixels, into a full 480×320 canvas that persists between frames. Disposal 2 ("restore to background") is honoured too. When the GIF loops, the first frame is complete again.
+- **Except over the page.** A GIF played with `over_page` uses the transparent colour for "the page shows here", so its frames are not deltas: every frame is complete and uses disposal 2. The screen draws each one on a fresh copy of the dimmed page, with nothing left over from the frame before.
 
 ## Overlay format
 
