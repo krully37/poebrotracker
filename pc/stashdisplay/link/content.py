@@ -22,6 +22,7 @@ ANIM_FIT = {"fit": "cover", "x": 50, "y": 50}
 STILL_SECONDS = 4.0  # an image (or a video's still frame, for now) shown for an event
 MIN_SECONDS = 3.0  # shorter GIFs loop until then
 MAX_SECONDS = 10.0
+EVENT_LOOPS = {"levelup": 2}  # how many times an event's GIF plays (once if not listed)
 
 
 class ContentBuilder:
@@ -80,7 +81,8 @@ class ContentBuilder:
         if file_id not in self.files:
             if is_gif:
                 data = gif_for_screen(source, ANIM_FIT)
-                self.seconds[file_id] = min(MAX_SECONDS, max(MIN_SECONDS, gif_seconds(data)))
+                loops = EVENT_LOOPS.get(kind, 1)
+                self.seconds[file_id] = min(MAX_SECONDS, max(MIN_SECONDS, loops * gif_seconds(data)))
                 self.files[file_id] = FileContent(data, "gif")
             elif still is not None:
                 self.files[file_id] = FileContent(jpeg_for_screen(still, ANIM_FIT), "jpeg")

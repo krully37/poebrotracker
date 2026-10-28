@@ -135,6 +135,16 @@ def test_animation_files_and_durations(tmp_path, monkeypatch):
     assert builder.animation("death", still["id"])[2] == contentlib.STILL_SECONDS
 
 
+def test_levelup_gif_plays_twice(tmp_path, monkeypatch):
+    monkeypatch.setattr(contentlib, "ANIM_DIR", tmp_path / "anims")
+    (tmp_path / "anims").mkdir()
+    (tmp_path / "anims" / "levelup.gif").write_bytes(gif(2.0))
+    (tmp_path / "anims" / "death.gif").write_bytes(gif(4.0, "blue"))
+    builder = contentlib.ContentBuilder(MediaStore(tmp_path / "m"))
+    assert builder.animation("levelup")[2] == 4.0  # two loops
+    assert builder.animation("death")[2] == 4.0  # once
+
+
 def _png() -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (64, 40), "green").save(buf, "PNG")
