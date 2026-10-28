@@ -12,6 +12,7 @@ from ..media import MediaStore, compose_background
 from ..render import renderer
 from ..render.data import RenderData
 from ..render.theme import BACKGROUND
+from . import gif
 from . import protocol as p
 from .client import Content, FileContent, PageContent
 
@@ -109,9 +110,7 @@ def gif_for_screen(path: Path, bg: dict) -> bytes:
     with Image.open(path) as im:
         frames, durations = [], []
         for frame in ImageSequence.Iterator(im):
-            frames.append(compose_background(frame, bg["fit"], bg["x"], bg["y"]).quantize(256))
+            frames.append(compose_background(frame, bg["fit"], bg["x"], bg["y"]))
             durations.append(max(20, int(frame.info.get("duration", im.info.get("duration", 100)))))
-    buf = io.BytesIO()
-    frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0, optimize=False)
-    return buf.getvalue()
+    return gif.encode(frames, durations)
 
