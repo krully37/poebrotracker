@@ -126,6 +126,7 @@ Decided 2026-10-27.
 ## 5. Backgrounds and media
 
 - Formats: **still image, GIF, video** (video is converted to MJPEG on the PC with ffmpeg).
+- **Every GIF sent to the screen is re-encoded by `pc/stashdisplay/link/gif.py`** (decided 2026-10-28): one 255-colour palette for the whole GIF, no dithering, and pixels that did not change since the previous frame stored as transparent. That is lossless after the palette step and keeps a mostly still animation about 5× smaller than storing every frame in full (the level-up GIF: 3.5 MB → 0.7 MB). It applies to backgrounds, event animations and the start animation alike. Phone-camera noise is not frozen here (that would be lossy); `pc/tools/anim_from_video.py` does it for the built-in animations.
 - Stored in the screen's flash (a ~10–12 MB filesystem partition, out of 16 MB). The settings page shows how much space is used and refuses uploads that don't fit. That's roughly 20–40 s of 480×320 video in total.
 - **[PROPOSED]** Get ffmpeg through `imageio-ffmpeg`, which downloads it on first use, instead of bundling it (keeps the .exe small). Bundling is the alternative if your friend's PC can't download it.
 

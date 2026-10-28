@@ -70,6 +70,7 @@ The PC compares this with what it wants on the screen and only sends what differ
   - `toast` is an overlay shown over the current page for `seconds` (default 2), then forgotten.
 - **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations (`launch`, `levelup`, `death`), `boot` the start animation. A sync deletes every file the PC no longer wants, `boot` included (since 2026-10-28 the PC sends it like the others). Animations, `boot` included, are sent after the page list, so the pages show up first. An event whose animation is the same as `boot` gets no file of its own: PLAY names `boot`.
 - **Formats:** `jpeg` and `gif` are 480×320, ready to show. `mjpeg` comes with the video step.
+- **GIF frames are deltas.** After the first frame, a pixel that did not change is stored as the transparent colour, and frames use disposal 1 ("do not dispose"). The screen must draw each frame over the previous one, skipping transparent pixels, into a full 480×320 canvas that persists between frames. Disposal 2 ("restore to background") is honoured too. When the GIF loops, the first frame is complete again.
 
 ## Overlay format
 
