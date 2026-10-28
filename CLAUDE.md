@@ -17,7 +17,7 @@ Status on 2026-10-27: steps 1–4b are done, and the `Client.txt` watcher is che
 - When trying the app, set `STASHDISPLAY_HOME` to a throwaway folder so the real settings are not touched.
 - Commit as `krully37` <58934068+krully37@users.noreply.github.com> (set it with `git config` in a new clone).
 - **Every GIF for the screen goes through `gif.encode()`** (`pc/stashdisplay/link/gif.py`), never a plain Pillow save: that keeps it small (`docs/SCOPE.md` §5).
-- **Never leave commits unpushed without asking.** After every commit, push to `origin` if the owner asked for it; otherwise ask whether to push before ending the turn.
+- **Never leave commits unpushed without asking.** After every commit, push to `origin` if the owner asked for it; otherwise ask whether to push before ending the turn. After pushing from a worktree, fast-forward the main checkout's `main` yourself (only if it has no one else's uncommitted work) and remove your finished worktree.
 
 ## Hard constraints
 
