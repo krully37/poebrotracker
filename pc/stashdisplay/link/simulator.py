@@ -48,9 +48,9 @@ class SimScreen:
             self.event_seq = 0
             self.pending_events: dict[int, tuple[bytes, float, int]] = {}  # seq -> (frame, sent, tries)
             self.decoded: dict[str, Image.Image] = {}
-            boot = self.files.get("boot")
+            boot = self.files.get(p.BOOT_FILE)
             if boot:
-                self.anim = ("boot", None, self.clock(), self.clock() + _duration(boot))
+                self.anim = (p.BOOT_FILE, None, self.clock(), self.clock() + _duration(boot))
 
     def flash_used(self) -> int:
         return sum(f["size"] for f in self.files.values())
@@ -61,6 +61,7 @@ class SimScreen:
             "flash_total": self.flash_bytes, "flash_free": self.flash_bytes - self.flash_used(),
             "overlays": {k: crc for k, (crc, _) in self.overlays.items()},
             "files": {k: {"crc": f["crc"], "size": f["size"], "format": f["format"]} for k, f in self.files.items()},
+            "playing": self.anim[0] if self.anim and self.clock() < self.anim[3] else None,
         }
 
     # --- Wire -----------------------------------------------------------------------------
@@ -364,7 +365,11 @@ def _decode_frames(data: bytes) -> list[tuple[Image.Image, int]]:
 
 
 def _duration(file: dict) -> float:
-    return sum(d for _, d in _decode_frames(file["data"])) / 1000 if file["format"] == "gif" else 3.0
+    """How long the start animation plays at power-on."""
+    if file["format"] != "gif":
+        return p.STILL_SECONDS
+    seconds = sum(d for _, d in _decode_frames(file["data"])) / 1000
+    return min(p.ANIM_MAX_SECONDS, max(p.ANIM_MIN_SECONDS, seconds))
 
 
 def _ease(t: float) -> float:

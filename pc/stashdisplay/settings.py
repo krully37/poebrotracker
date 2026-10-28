@@ -26,9 +26,12 @@ DEFAULTS: dict = {
     "new_session_on_start": True,
     "poeninja": {"enabled": True, "interval": 1800},
     "serial": {"port": ""},        # "" = detect the screen automatically
-    # Game events from Client.txt. "media": an uploaded file id, "" = the built-in animation.
+    # Game events from Client.txt, and "boot": the screen's start animation (power-on, and each
+    # time the PC connects). "media": an uploaded file id, "" = the built-in animation.
     "events": {
         "client_log": "",          # "" = find Client.txt automatically
+        "boot": {"enabled": True, "media": ""},
+        "launch": {"enabled": True, "media": ""},
         "levelup": {"enabled": True, "media": ""},
         "death": {"enabled": True, "media": ""},
     },

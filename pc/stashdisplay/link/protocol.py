@@ -242,3 +242,10 @@ RING_RADIUS = 30
 SLIDE_SECONDS = 0.28
 DIM_LEVEL = 0.3  # backlight while the PC is away
 FLASH_BYTES = 11 * 1024 * 1024  # file storage on the screen (§5 of the scope)
+# The start animation, played at power-on without the PC: a GIF plays once, looping until
+# ANIM_MIN_SECONDS if shorter and cut at ANIM_MAX_SECONDS; an image shows for STILL_SECONDS.
+# Event animations follow the same rule, worked out by the PC and sent in PLAY.
+BOOT_FILE = "boot"
+ANIM_MIN_SECONDS = 3.0
+ANIM_MAX_SECONDS = 10.0
+STILL_SECONDS = 4.0

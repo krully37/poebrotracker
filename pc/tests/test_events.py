@@ -189,3 +189,83 @@ def test_events_play_on_the_screen(screen_app):
     pair.unplug()
     wait_for(lambda: app.link.state == "searching")
     assert app.play_event("levelup", "Krully", 94) is False
+
+
+# --- Start animations: power-on, PC connects, game start ----------------------------------------
+
+def test_game_start_line():
+    chars = Characters(None)
+    assert parse("2026/08/19 22:07:49 ***** LOG FILE OPENING *****\r\n", chars) == GameEvent("launch", "")
+    # Typed in chat, it has the client prefix and a name: ignored.
+    assert parse(line("Troll: 2026/08/19 22:07:49 ***** LOG FILE OPENING *****"), chars) is None
+    assert parse(line(": ***** LOG FILE OPENING *****"), chars) is None
+
+
+def test_start_animation_is_built_in_and_has_a_fixed_id(tmp_path):
+    builder = contentlib.ContentBuilder(MediaStore(tmp_path / "m"))
+    file_id, f, seconds = builder.animation("boot")
+    assert file_id == "boot" and f.format == "gif" and seconds == 4.0  # 5 turns of the cat
+    launch_id, launch, _ = builder.animation("launch")
+    assert launch_id.startswith("anim-launch-") and launch.crc == f.crc
+
+
+@pytest.fixture
+def start_rig(tmp_path, monkeypatch):
+    monkeypatch.setattr(contentlib, "ANIM_DIR", tmp_path / "anims")
+    (tmp_path / "anims").mkdir()
+    (tmp_path / "anims" / "start.gif").write_bytes(gif(4.0, "green"))
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    pair = LoopbackPair()
+    sim = SimScreen(pair.screen)
+    runner = SimRunner(sim).start()
+    yield app, sim, pair
+    if app.link:
+        app.link.stop()
+    runner.close()
+
+
+def test_start_animation_plays_when_the_pc_connects(start_rig):
+    app, sim, pair = start_rig
+    app.start_link(lambda: [pair.pc] if pair.plugged else [])
+    wait_for(lambda: sim.anim is not None and sim.anim[0] == "boot")
+    # Game start uses the same cat: one copy on the screen, played from the boot file.
+    assert "boot" in sim.files and not any(k.startswith("anim-launch") for k in sim.files)
+    assert app.anim_files["launch"] == ("boot", 4.0)
+    sim.anim = None
+    app.on_game_event(GameEvent("launch", ""))
+    wait_for(lambda: sim.anim is not None and sim.anim[0] == "boot")
+
+
+def test_power_on_plays_it_once_and_the_pc_does_not_restart_it(start_rig):
+    app, sim, pair = start_rig
+    app.start_link(lambda: [pair.pc] if pair.plugged else [])
+    wait_for(lambda: sim.anim is not None and sim.anim[0] == "boot")
+    sim.anim = None
+    synced = app.link.last_sync
+    app.link.request_sync()
+    wait_for(lambda: app.link.last_sync > synced)
+    assert sim.anim is None  # a plain sync does not replay it
+    # Unplugged and plugged back in: the screen plays it on its own at power-on...
+    pair.unplug()
+    wait_for(lambda: app.link.state == "searching")
+    sim.power_cycle()
+    assert sim.anim[0] == "boot"
+    started = sim.anim[2]
+    pair.plug()
+    wait_for(lambda: app.link.state == "connected" and sim.pages)
+    assert sim.anim is not None and sim.anim[2] == started  # ...and the PC leaves it alone
+    # A reconnect without a power cycle (cable glitch, app restart) plays it again.
+    sim.anim = None
+    pair.unplug()
+    wait_for(lambda: app.link.state == "searching")
+    pair.plug()
+    wait_for(lambda: sim.anim is not None and sim.anim[0] == "boot")
+
+
+def test_screen_start_turned_off_leaves_the_screen(start_rig):
+    app, sim, pair = start_rig
+    events = app.store.settings["events"]
+    app.save({**app.store.settings, "events": {**events, "boot": {"enabled": False, "media": ""}}}, None)
+    app.start_link(lambda: [pair.pc] if pair.plugged else [])
+    wait_for(lambda: app.link.state == "connected" and any(k.startswith("anim-launch") for k in sim.files))
+    assert "boot" not in sim.files and sim.anim is None  # game start keeps its own copy

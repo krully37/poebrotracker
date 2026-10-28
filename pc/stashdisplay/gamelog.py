@@ -1,4 +1,4 @@
-"""Game events (level-up, death) read from the game's log, Client.txt.
+"""Game events (game start, level-up, death) read from the game's log, Client.txt.
 
 The file is only ever read, from where it ended when the app started: it can be several GB.
 It is opened for each read and closed straight away, so the friend can still delete it
@@ -10,6 +10,9 @@ Line formats (English client), as matched by community log tools:
     2026/10/27 19:05:40 123456 cffb0734 [INFO Client 1234] : Other has joined the area.
 System messages start with ": " right after the bracket. Chat lines start with a name
 instead ("Bob: hello"), so nobody can trigger an animation by typing in chat.
+
+The game writes this line, with no bracket, each time it starts:
+    2026/10/27 19:00:02 ***** LOG FILE OPENING *****
 
 Whose character is whose: a name in a level-up line is one of the friend's characters,
 unless that name was ever seen joining or leaving the area (only other players do that).
@@ -37,11 +40,12 @@ LINE = re.compile(r"^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d .*?\[INFO Client \d+\] (: .*
 LEVEL = re.compile(r"^: (\S+) \(([^)]+)\) is now level (\d+)$")
 SLAIN = re.compile(r"^: (\S+) has been slain\.$")
 OTHER = re.compile(r"^: (\S+) has (?:joined|left) the area\.$")
+OPENING = re.compile(r"^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d \*{5} LOG FILE OPENING \*{5}$")
 
 
 @dataclass
 class GameEvent:
-    kind: str  # "levelup" or "death"
+    kind: str  # "launch", "levelup" or "death"
     name: str
     level: int | None = None
 
@@ -110,8 +114,12 @@ class Characters:
 
 
 def parse(line: str, characters: Characters) -> GameEvent | None:
-    """One log line: a GameEvent for the friend's characters, else None (learning as it goes)."""
-    m = LINE.match(line.rstrip("\r\n"))
+    """One log line: the game starting, or a GameEvent for the friend's characters, else None
+    (learning as it goes)."""
+    line = line.rstrip("\r\n")
+    if OPENING.match(line):
+        return GameEvent("launch", "")
+    m = LINE.match(line)
     if not m:
         return None
     msg = m.group(1)

@@ -1,5 +1,6 @@
 """What the screen should hold: the visible pages' overlays, their backgrounds as screen-ready
-files, where a long press resets something, and the event animations (level-up, death)."""
+files, where a long press resets something, the event animations (game start, level-up,
+death) and the start animation (power-on, and each time the PC connects)."""
 
 import hashlib
 import io
@@ -16,12 +17,13 @@ from . import protocol as p
 from .client import Content, FileContent, PageContent
 
 JPEG_QUALITY = 88
-# Built-in event animations, made for this project: assets/anims/levelup.gif and death.gif.
+# Built-in event animations, made for this project: assets/anims/<kind>.gif, except these.
 ANIM_DIR = Path(__file__).resolve().parent.parent / "assets" / "anims"
+BUILTIN = {"launch": "start.gif", "boot": "start.gif"}  # the spinning cat
 ANIM_FIT = {"fit": "cover", "x": 50, "y": 50}
-STILL_SECONDS = 4.0  # an image (or a video's still frame, for now) shown for an event
-MIN_SECONDS = 3.0  # shorter GIFs loop until then
-MAX_SECONDS = 10.0
+STILL_SECONDS = p.STILL_SECONDS  # an image (or a video's still frame, for now) shown for an event
+MIN_SECONDS = p.ANIM_MIN_SECONDS  # shorter GIFs loop until then
+MAX_SECONDS = p.ANIM_MAX_SECONDS
 EVENT_LOOPS = {"levelup": 2}  # how many times an event's GIF plays (once if not listed)
 
 
@@ -65,14 +67,15 @@ class ContentBuilder:
 
 
     def animation(self, kind: str, media_id: str = "") -> tuple[str, FileContent, float] | None:
-        """The screen file for an event: the friend's upload, else the built-in one, else None."""
+        """The screen file for an event, or for "boot" (the start animation): the friend's
+        upload, else the built-in one, else None."""
         source = self.media.source_path(media_id) if media_id else None
         if source is not None:
             meta = self.media.get(media_id)
             still = self.media.still_path(media_id)
             is_gif = meta["kind"] == "gif"
         else:
-            source = still = ANIM_DIR / f"{kind}.gif"
+            source = still = ANIM_DIR / BUILTIN.get(kind, f"{kind}.gif")
             if not source.is_file():
                 return None
             is_gif = True
@@ -89,7 +92,8 @@ class ContentBuilder:
                 self.seconds[file_id] = STILL_SECONDS
             else:
                 return None
-        return file_id, self.files[file_id], self.seconds[file_id]
+        # The screen plays "boot" on its own at power-on, so that file has a fixed id.
+        return p.BOOT_FILE if kind == "boot" else file_id, self.files[file_id], self.seconds[file_id]
 
 
 def gif_seconds(data: bytes) -> float:

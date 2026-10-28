@@ -30,7 +30,9 @@ from .settings import Store
 log = logging.getLogger(__name__)
 
 TOASTS = {"reset_session": "Session reset", "reset_rate": "Div/h reset"}
-EVENT_KINDS = ("levelup", "death")
+EVENT_KINDS = ("launch", "levelup", "death")
+# "boot" is the start animation: the screen plays it at power-on, the PC each time it connects.
+ANIM_KINDS = ("boot", *EVENT_KINDS)
 CARD_SECONDS = 4.0  # the text stand-in for an event without a GIF
 
 
@@ -102,8 +104,14 @@ class App:
 
     def start_link(self, ports: Callable[[], list[Port]] | None = None) -> ScreenLink:
         """Connect to the screen: the given ports (the simulator), else USB serial ports."""
-        self.link = ScreenLink(ports or self._serial_ports, self.screen_content, self.on_screen_event).start()
+        self.link = ScreenLink(ports or self._serial_ports, self.screen_content, self.on_screen_event,
+                               on_connect=self._screen_connected).start()
         return self.link
+
+    def _screen_connected(self, inventory: dict) -> None:
+        """The start animation, unless the screen is already playing it (it just powered on)."""
+        if "boot" in self.anim_files and inventory.get("playing") != protocol.BOOT_FILE:
+            self.play_event("boot", "", force=True)
 
     def _serial_ports(self) -> list[Port]:
         out = []
@@ -119,11 +127,14 @@ class App:
         with self._render_lock:
             content = self.content.build(self.store.pages, data)
             anim_files = {}
-            for kind in EVENT_KINDS:
+            for kind in ANIM_KINDS:
                 opts = self.store.settings["events"][kind]
                 anim = self.content.animation(kind, opts["media"]) if opts["enabled"] else None
                 if anim:
                     file_id, f, seconds = anim
+                    boot = content.files.get(protocol.BOOT_FILE)
+                    if boot and boot.crc == f.crc:
+                        file_id = protocol.BOOT_FILE  # the same animation: one copy on the screen
                     content.files[file_id] = f
                     anim_files[kind] = (file_id, seconds)
             self.anim_files = anim_files
@@ -207,9 +218,9 @@ class App:
             played = self.link.play(file_id, None, seconds)
         else:
             # No GIF on the screen (none made yet, or no room): large text instead.
-            title = f"Level {level}" if kind == "levelup" else "Slain"
+            title = {"boot": "Stash Display", "launch": "Path of Exile", "levelup": f"Level {level}"}.get(kind, "Slain")
             with self._render_lock:
-                card = renderer.event_card(title, name, color=theme.TITLE if kind == "levelup" else theme.DEATH)
+                card = renderer.event_card(title, name, color=theme.DEATH if kind == "death" else theme.TITLE)
                 overlay = protocol.encode_overlay(card)
             seconds = CARD_SECONDS
             played = self.link.play(None, overlay, seconds)

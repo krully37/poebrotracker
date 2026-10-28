@@ -34,7 +34,7 @@ STATIC = Path(__file__).with_name("static")
 COOKIE = "sd_token"
 WRITE_HEADER = "X-Stashdisplay"
 SIM_FPS = 20
-EVENT_NAMES = {"levelup": "Level-up", "death": "Death"}
+EVENT_NAMES = {"boot": "Screen start", "launch": "Game start", "levelup": "Level-up", "death": "Death"}
 SIM_CHARACTER = ("Testchar", "Witch")
 PLACEHOLDERS = ["total", "rate", "session", "today", "best_hour", "league_gain", "div_price",
                 "league", "time", "date", "session_since", "session_duration", "synced"]
@@ -315,6 +315,8 @@ def create_app(app: App) -> Flask:
             abort(400)
         own = app.characters.listing()
         name, level = (own[0]["name"], own[0]["level"]) if own else ("Exile", 92)
+        if kind in ("boot", "launch"):
+            name = ""  # not about a character
         return jsonify({"played": app.play_event(kind, name, level if kind == "levelup" else None, force=True)})
 
     @web.post("/api/sim/log")
@@ -325,17 +327,19 @@ def create_app(app: App) -> Flask:
         name, char_class = SIM_CHARACTER
         known = {c["name"]: c for c in app.characters.listing()}
         level = (known.get(name, {}).get("level") or 1) + 1
-        stamp = time.strftime("%Y/%m/%d %H:%M:%S") + " 123456789 cffb0734 [INFO Client 4242] : "
+        now = time.strftime("%Y/%m/%d %H:%M:%S")
+        stamp = now + " 123456789 cffb0734 [INFO Client 4242] : "
         lines = {
-            "levelup": [f"{name} ({char_class}) is now level {min(level, 100)}"],
-            "death": [f"{name} has been slain."],
+            "launch": [f"{now} ***** LOG FILE OPENING *****"],
+            "levelup": [stamp + f"{name} ({char_class}) is now level {min(level, 100)}"],
+            "death": [stamp + f"{name} has been slain."],
             # Someone joins the party's area, then levels up: ignored.
-            "party": ["Partymate has joined the area.", "Partymate (Marauder) is now level 64"],
+            "party": [stamp + "Partymate has joined the area.", stamp + "Partymate (Marauder) is now level 64"],
         }.get(kind)
         if lines is None or app.fake_log is None:
             abort(400)
         with open(app.fake_log, "a", encoding="utf-8", newline="") as f:
-            f.writelines(stamp + line + "\r\n" for line in lines)
+            f.writelines(line + "\r\n" for line in lines)
         return jsonify({"ok": True})
 
     # --- Windows autostart ----------------------------------------------------------

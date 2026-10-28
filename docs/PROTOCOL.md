@@ -48,8 +48,11 @@ COBS( type:u8 | seq:u16 LE | payload | crc32:u32 LE ) 0x00
 {"ok": true, "version": 1, "firmware": "…", "width": 480, "height": 320,
  "flash_total": 11534336, "flash_free": 9000000,
  "overlays": {"<page id>": "<crc>"},
- "files": {"<file id>": {"crc": "…", "size": 123, "format": "jpeg"}}}
+ "files": {"<file id>": {"crc": "…", "size": 123, "format": "jpeg"}},
+ "playing": "boot"}
 ```
+`playing` is the file of the full-screen animation on screen right now, or `null` (added 2026-10-28). After the first sync of each connection the PC plays `boot`, unless `playing` is already `"boot"` (the screen just powered on and is showing it). A screen that leaves the field out counts as playing nothing.
+
 The PC compares this with what it wants on the screen and only sends what differs. A reconnect after a cable pull resends nothing. After a power cycle, the overlays (kept in PSRAM) are resent; the files (in flash) are not.
 
 **Page entries in PAGES:**
@@ -65,7 +68,7 @@ The PC compares this with what it wants on the screen and only sends what differ
   - `overlay` goes to PSRAM under `id`: a page id, or `@event` for an event animation's text.
   - `file` goes to flash. `BEGIN` is refused with `"no_space"` (plus `flash_free`) when it cannot fit, counting the space a file of the same id would free.
   - `toast` is an overlay shown over the current page for `seconds` (default 2), then forgotten.
-- **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations, `boot` the power-on animation. A sync deletes every file the PC no longer wants, except `boot`. Event animations are sent after the page list, so the pages show up first.
+- **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations (`launch`, `levelup`, `death`), `boot` the start animation. A sync deletes every file the PC no longer wants, `boot` included (since 2026-10-28 the PC sends it like the others). Animations, `boot` included, are sent after the page list, so the pages show up first. An event whose animation is the same as `boot` gets no file of its own: PLAY names `boot`.
 - **Formats:** `jpeg` and `gif` are 480×320, ready to show. `mjpeg` comes with the video step.
 
 ## Overlay format
@@ -90,4 +93,4 @@ zlib stream (with header) of:
 | Swipe | At least **60 px** horizontally, more horizontal than vertical: next (left) or previous (right) page, wrapping around. **0.28 s** slide, ease-out. Then `EVENT page`. |
 | Long press | Held still **0.4 s** inside a zone: a ring of radius **30 px** appears around the finger and fills clockwise over **1.5 s**. Moving or lifting cancels it. When it closes: `EVENT reset` with the zone's action. The PC resets the value and sends a toast. Outside any zone, a long press does nothing. |
 | Dots | Drawn by the screen at the bottom (y = 311), or an "n/N" counter above 8 pages. |
-| Boot | At power-on, the `boot` file plays once if present, then the pages or the offline screen. |
+| Boot | At power-on, the `boot` file plays if present, then the pages or the offline screen. A GIF plays once, looping until **3 s** if shorter and cut at **10 s**; an image shows for **4 s**. A PLAY from the PC replaces it, like any other animation. |

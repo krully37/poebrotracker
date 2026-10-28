@@ -19,9 +19,7 @@ log = logging.getLogger(__name__)
 
 RETRY_CONNECT = 2.0  # seconds between attempts to find the screen
 RESYNC_EVERY = 60  # pages are re-rendered every minute (clock, "synced X ago")
-# Files the PC manages elsewhere (the boot animation): never deleted by a page sync.
-PROTECTED_PREFIXES = ("boot",)
-ANIM_PREFIX = "anim-"  # event animations (level-up, death)
+ANIM_PREFIX = "anim-"  # event animations (game start, level-up, death)
 
 
 class LinkError(Exception):
@@ -58,10 +56,12 @@ class Content:
 
 class ScreenLink:
     def __init__(self, ports: Callable[[], Iterable[Port]], content: Callable[[], Content],
-                 on_event: Callable[[dict], None], clock: Callable[[], float] = time.monotonic):
+                 on_event: Callable[[dict], None], clock: Callable[[], float] = time.monotonic,
+                 on_connect: Callable[[dict], None] | None = None):
         self.ports = ports
         self.content = content
         self.on_event = on_event
+        self.on_connect = on_connect  # after the first sync of each connection, with the inventory
         self.clock = clock
         self.state = "searching"
         self.info: dict = {}
@@ -149,6 +149,11 @@ class ScreenLink:
 
     def _session(self) -> None:
         self._sync()
+        if self.on_connect:
+            try:
+                self.on_connect(self.inventory)
+            except Exception:
+                log.exception("screen connect handler failed")
         while not self.stopped.is_set():
             try:
                 job = self.jobs.get(timeout=0.1)
@@ -186,13 +191,13 @@ class ScreenLink:
         have_overlays = self.inventory.setdefault("overlays", {})
         # Free space first, then backgrounds, overlays (the page on screen first), the page list, animations.
         for file_id in list(have_files):
-            if file_id not in content.files and not file_id.startswith(PROTECTED_PREFIXES):
+            if file_id not in content.files:
                 reply = self._request(p.DELETE, {"id": file_id})
                 have_files.pop(file_id, None)
                 self.info["flash_free"] = reply.get("flash_free", self.info.get("flash_free"))
-        # Backgrounds before the pages that use them; event animations last, so pages show up first.
-        backgrounds = {k: f for k, f in content.files.items() if not k.startswith(ANIM_PREFIX)}
-        anims = {k: f for k, f in content.files.items() if k.startswith(ANIM_PREFIX)}
+        # Backgrounds before the pages that use them; animations last, so pages show up first.
+        backgrounds = {k: f for k, f in content.files.items() if not _is_animation(k)}
+        anims = {k: f for k, f in content.files.items() if _is_animation(k)}
         missing_files = self._upload(backgrounds, have_files)
         pages = sorted(content.pages, key=lambda pg: pg.id != self.current_page)
         for page in pages:
@@ -295,3 +300,7 @@ class ScreenLink:
 
 class NoSpace(LinkError):
     pass
+
+
+def _is_animation(file_id: str) -> bool:
+    return file_id.startswith(ANIM_PREFIX) or file_id == p.BOOT_FILE

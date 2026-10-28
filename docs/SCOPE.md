@@ -42,7 +42,11 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
 - **Tap**: ask the PC for a refresh. The PC refuses if the last fetch was under 60 s ago, and the screen shows "too soon".
 - **Long press** on a value that can be reset: a ring is drawn around the finger and fills in about 1.5 s; lifting early cancels. When it closes, that value resets. Resettable values: **session** (gain, chart) and **div/h** (the rate starts counting again from that moment). League start, today and best hour cannot be reset, so a long press there does nothing. The PC tells the screen which areas of each page are resettable.
 - **Pagination dots**, drawn by the screen. They switch to a "4/9" counter when there are many pages.
-- **Boot animation**: at power-on the screen plays a GIF from its own flash once (no PC needed), then shows the pages, or the offline screen if the PC is not there yet. A default animation ships out of the box; the friend can replace it in the settings page (same upload and conversion as backgrounds).
+- **Start animation** ("Screen start" in settings, the `boot` file): at power-on the screen plays it from its own flash (no PC needed), then shows the pages, or the offline screen if the PC is not there yet. It follows the event rule in §5b (a GIF plays once, looping until 3 s if shorter, cut at 10 s). Decided 2026-10-28:
+  - The built-in one is the owner's cat spinning: 5 turns in 4 s, made from one sharp frame of `images/spin.mp4` (the real spin is too blurred; steps in `pc/stashdisplay/assets/anims/README.md`).
+  - It also plays **each time the PC connects**: the app starting, the cable plugged back in, or a reconnect after the link dropped. The PC skips it when the screen says it is already playing it, which is the case right after a power-on.
+  - The PC sends and updates the `boot` file like any other. It can be turned off (the file is then deleted), and the friend can replace it in the settings page (same upload and conversion as the event animations).
+  - The game start (§5b) uses the same cat by default. When both are the same, the screen keeps one copy and the game start plays the `boot` file.
 - **PC disconnected** after 90 s with no message, and the backlight dims. Full brightness returns on reconnect.
 - **Stale data** badge (rendered by the PC) if the last successful fetch is over 15 min old.
 - Firmware is flashed by the project owner before handing the screen over. The friend never flashes.
@@ -125,21 +129,22 @@ Decided 2026-10-27.
 - Stored in the screen's flash (a ~10–12 MB filesystem partition, out of 16 MB). The settings page shows how much space is used and refuses uploads that don't fit. That's roughly 20–40 s of 480×320 video in total.
 - **[PROPOSED]** Get ffmpeg through `imageio-ffmpeg`, which downloads it on first use, instead of bundling it (keeps the .exe small). Bundling is the alternative if your friend's PC can't download it.
 
-## 5b. Game events (level-up, death)
+## 5b. Game events (game start, level-up, death)
 
 - PoE1 has no combat log. The game writes a chat and events log, `Client.txt`, in its `logs` folder. The PC **tails** that file read-only, starting from the end, because it can be several GB. This is the same passive approach as many community tools, and it does not touch the game (no memory reading, no input, no overlay).
 - Built as a **general "log event → animation" system** configured in the settings page. **v1 events:**
   - **Level-up**, from lines like `: CharName (Class) is now level 92`
   - **Death**, from lines like `: CharName has been slain.`
-- Only system lines count (`] : ` right after the log prefix), so typing those words in chat triggers nothing.
+  - **Game start** (added 2026-10-28), from the line the game writes each time it starts: `2026/08/19 22:07:49 ***** LOG FILE OPENING *****`. Checked against the owner's log: 84 starts, each one such line. It plays the start animation (the spinning cat, §3) by default, for 4 s, and has its own switch and media in settings. If the game is already running when the app starts, nothing plays.
+- Only system lines count (`] : ` right after the log prefix), so typing those words in chat triggers nothing. The game-start line has no prefix at all, and a chat line always has one, so it cannot be typed either.
 - **Own characters only.** A name in a level-up line is taken as one of the friend's characters, unless that name was ever seen joining or leaving the area (only other players do that). The settings page lists the learned characters with a tick box each. Known gaps: a party member who levels up before ever sharing an area is learned by mistake (untick it), and a new character that dies before its first level-up is not known yet.
 - **Every level-up plays**; there is no level threshold. Each event can be turned on or off.
 - **Full-screen animation**, then back to the current page. The built-in animations are GIFs made for this project (`pc/stashdisplay/assets/anims/`), shown as they are, with no text on top. A GIF plays once, except for level-up, whose GIF (built-in or the friend's) plays twice (decided 2026-10-28); anything shorter than 3 s loops until 3 s, and anything past 10 s is cut. The built-in level-up GIF is the owner's cat pawing at its food tray, made with `pc/tools/anim_from_video.py` (the steps are in `pc/stashdisplay/assets/anims/README.md`). The friend can replace each one with their own GIF, image or video in the settings page.
-- **Until a GIF exists** (or if it does not fit on the screen), the PC sends a text card instead: "Level 92" or "Slain", with the character name, for 4 s.
+- **Until a GIF exists** (or if it does not fit on the screen), the PC sends a text card instead: "Level 92" or "Slain", with the character name, or "Path of Exile" for a game start, for 4 s.
 - **Bursts:** the newest event replaces the one playing, except that a level-up never cuts a death short.
 - Animations are stored on the screen in advance, so the PC only sends a small "play" message and playback starts within about a second. Events that happen while the screen is unplugged are dropped, not queued.
 - The `Client.txt` path is auto-detected (the standalone install, Steam and its other library folders; the most recently written one wins) and can be changed in settings. The file is read from its end at start-up, opened only for each read (so it can still be deleted), and read from the start again when it is emptied or replaced.
-- Animations share the flash budget in §5 with the backgrounds and the boot animation.
+- Animations share the flash budget in §5 with the backgrounds and the start animation.
 
 ## 6. Data sources
 
