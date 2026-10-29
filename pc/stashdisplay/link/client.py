@@ -41,7 +41,7 @@ class PageContent:
 @dataclass
 class FileContent:
     data: bytes
-    format: str  # "jpeg" or "gif" (later "mjpeg")
+    format: str  # "jpeg", "gif" or "sprite" (later "mjpeg")
     over_page: bool = False  # an event GIF with see-through pixels, played over the current page
 
     @property
@@ -78,6 +78,7 @@ class ScreenLink:
         self.last_sync = 0.0
         self.seen_events: list[int] = []
         self.current_page: str | None = None
+        self.idle_sprite: str | None = None  # the PC is idle: the screen bounces this file
 
     # --- Public API (any thread) ---------------------------------------------------------
 
@@ -101,6 +102,11 @@ class ScreenLink:
             return False
         self.jobs.put(("play", file_id, overlay, seconds, over_page))
         return True
+
+    def set_idle(self, sprite: str | None) -> None:
+        """Show the idle cat (a sprite file id), or the pages again (None). Kept across reconnects."""
+        self.idle_sprite = sprite
+        self.jobs.put(("idle",))
 
     def has_file(self, file_id: str) -> bool:
         return self.state != "searching" and file_id in self.inventory.get("files", {})
@@ -155,6 +161,8 @@ class ScreenLink:
                 self.on_connect(self.inventory)
             except Exception:
                 log.exception("screen connect handler failed")
+        if self.idle_sprite:
+            self._send_idle()  # a new connection starts on the pages
         while not self.stopped.is_set():
             try:
                 job = self.jobs.get(timeout=0.1)
@@ -185,6 +193,13 @@ class ScreenLink:
             if over_page:
                 msg["over_page"] = True
             self._request(p.PLAY, msg)
+        elif kind == "idle":
+            self._send_idle()
+
+    def _send_idle(self) -> None:
+        sprite = self.idle_sprite
+        # Not on the screen (no room for it): the pages stay.
+        self._request(p.IDLE, {"sprite": sprite if sprite and self.has_file(sprite) else None})
 
     # --- Sync --------------------------------------------------------------------------------
 
@@ -307,4 +322,4 @@ class NoSpace(LinkError):
 
 
 def _is_animation(file_id: str) -> bool:
-    return file_id.startswith(ANIM_PREFIX) or file_id == p.BOOT_FILE
+    return file_id.startswith(ANIM_PREFIX) or file_id in (p.BOOT_FILE, p.IDLE_FILE)

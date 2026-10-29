@@ -35,6 +35,9 @@ DEFAULTS: dict = {
         "levelup": {"enabled": True, "media": ""},
         "death": {"enabled": True, "media": ""},
     },
+    # The idle cat: after this many minutes without keyboard or mouse input (and no media
+    # playing), the screen shows the cat bouncing around instead of the pages.
+    "idle": {"enabled": True, "minutes": 10},
     "web": {"port": 47821},
 }
 
@@ -45,6 +48,7 @@ LIMITS = [
     (("rate_window_minutes",), 15, 360),
     (("spark_points",), 8, 288),
     (("poeninja", "interval"), 900, 86400),
+    (("idle", "minutes"), 1, 120),
     (("web", "port"), 1024, 65535),
 ]
 

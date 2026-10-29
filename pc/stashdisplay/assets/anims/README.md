@@ -5,6 +5,7 @@ Put the default animations here. They ship with the app and are sent to the scre
 - `start.gif`: the screen starting (power-on, and each time the PC connects), and the game starting
 - `levelup.gif`: played when one of the friend's characters levels up
 - `death.gif`: played when one of them is slain
+- `idle.png`: the idle cat, which the screen bounces around while the PC is idle (not a GIF: the screen moves and turns it itself)
 
 Guidelines:
 - 480×320. Other sizes are cropped to fill the screen, centred.
@@ -46,6 +47,12 @@ rembg-venv/Scripts/rembg p -m birefnet-general-lite -ppm frames cut
 ```
 
 The 30 cut-out frames (RGBA PNGs) are then saved as one GIF: alpha below 128 becomes the transparent colour, frames last 70 ms, and the last one (the scream) is held for 0.97 s so the clip lasts exactly 3 s and never restarts. That GIF goes through `gif_over_page()` in `link/content.py`, which scales it to 180×320 and puts it in the bottom-right corner of a 480×320 frame. Result: 3.0 s, about 510 KB. The cutout's straight bottom and right edges (where the cat runs off the video) sit on the screen's edges.
+
+## How `idle.png` was made
+
+The tabby on the left of the owner's night photo of two cats on the window sill (`images/idle-photo.jpg`, 900×1600, not committed). The cat was cropped out first (x 110 to 460, y 630 to 875), so the ginger cat beside it could not confuse the model, then cut out with rembg and its `birefnet-general` model (it keeps the whiskers; `isnet-general-use` lost them), in the same throwaway venv as the death GIF, and trimmed to its visible pixels: 230×199. The bottom edge is straight, where the sill hides the paws.
+
+The app scales it to 150 px wide (`IDLE_WIDTH` in `link/content.py`) and sends it in the overlay format, about 13 kB. Keep any replacement no wider than the cat in its photo, or it gets blurry.
 
 Until a file exists, the screen shows a text card instead ("Level 92", "Slain", "Path of Exile"); with no start animation, nothing plays.
 The friend can replace each one in the settings page.

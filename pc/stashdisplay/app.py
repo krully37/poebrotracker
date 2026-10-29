@@ -1,5 +1,5 @@
 """The running app: settings, assets, media, history, the data shown on the pages, the screen,
-and the game events read from Client.txt.
+the game events read from Client.txt, and the idle cat.
 
 The settings page, the tray and the screen link all talk to one App. Until the WealthyExile
 step, the history is demo data that grows by one point every 5 minutes, so the screen and
@@ -16,6 +16,7 @@ from collections.abc import Callable
 from . import paths
 from .assets import AssetCache
 from .gamelog import Characters, GameEvent, LogWatcher, find_client_log
+from .idle import IdleWatch
 from .link import protocol
 from .link.client import Content, ScreenLink
 from .link.content import ContentBuilder
@@ -59,6 +60,7 @@ class App:
         self.anim_files: dict[str, tuple[str, float, bool]] = {}
         self._playing: tuple[str, float] | None = None  # (event kind, monotonic end)
         self.player: Player | None = None  # what the PC plays, for the media card
+        self.idle: IdleWatch | None = None
 
     @classmethod
     def create(cls, offline: bool = False) -> "App":
@@ -139,6 +141,9 @@ class App:
                     content.files[file_id] = f
                     anim_files[kind] = (file_id, seconds, f.over_page)
             self.anim_files = anim_files
+            sprite = self.content.idle_sprite() if self.store.settings["idle"]["enabled"] else None
+            if sprite:
+                content.files[protocol.IDLE_FILE] = sprite
         return content
 
     def _screen_sync(self) -> None:
@@ -153,6 +158,10 @@ class App:
     def on_screen_event(self, event: dict) -> None:
         kind = event.get("type")
         now = time.time()
+        if kind == "wake":
+            if self.idle:
+                self.idle.wake()  # the cat goes for a minute; the screen already shows the pages
+            return
         if kind == "tap" and event.get("action") in MEDIA_ACTIONS:
             if self.player:
                 self.player.command(event["action"])  # the card follows through on_change
@@ -188,6 +197,20 @@ class App:
         if any(slot and slot["widget"] == "media"
                for page in self.store.pages if not page["hidden"] for slot in page["slots"].values()):
             self._screen_sync()
+
+    # --- Idle cat ------------------------------------------------------------------------
+
+    def start_idle(self) -> IdleWatch:
+        self.idle = IdleWatch(lambda: self.store.settings["idle"], self._media_playing, self._idle_changed).start()
+        return self.idle
+
+    def _media_playing(self) -> bool:
+        now = self.player.now() if self.player else None
+        return bool(now and now.playing)
+
+    def _idle_changed(self, show: bool) -> None:
+        if self.link:
+            self.link.set_idle(protocol.IDLE_FILE if show else None)
 
     # --- Game events ---------------------------------------------------------------------
 

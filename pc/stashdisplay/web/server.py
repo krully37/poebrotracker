@@ -244,6 +244,8 @@ def create_app(app: App) -> Flask:
         if app.simulator:
             sim, pair = app.simulator
             out["sim"] = {**sim.status(), "plugged": pair.plugged}
+        if app.idle:
+            out["idle"] = {"active": app.idle.active, "forced": app.idle.forced}
         return out
 
     @web.get("/api/screen")
@@ -294,6 +296,15 @@ def create_app(app: App) -> Flask:
     def sim_power():
         sim, _ = simulator()
         sim.power_cycle()
+        return jsonify(screen_status())
+
+    @web.post("/api/sim/idle")
+    def sim_idle():
+        """Pretend nobody has touched the PC for ages, so the idle cat can be tried at once."""
+        simulator()
+        if app.idle:
+            app.idle.forced = bool((request.get_json(force=True) or {}).get("idle"))
+            app.idle.check()
         return jsonify(screen_status())
 
     # --- Game events -------------------------------------------------------------------

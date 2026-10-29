@@ -347,6 +347,18 @@
     </section>
 
     <section class="panel">
+      <h2 x-text="t('idle.title')"></h2>
+      <p class="hint" x-text="t('idle.hint')"></p>
+      <div class="grid2">
+        <label class="inline"><input type="checkbox" x-model="draft.settings.idle.enabled">
+          <span x-text="t('idle.enabled')"></span></label>
+        <label><span x-text="t('idle.minutes')"></span>
+          <input type="number" min="1" max="120" x-model.number="draft.settings.idle.minutes"
+                 :disabled="!draft.settings.idle.enabled"></label>
+      </div>
+    </section>
+
+    <section class="panel">
       <h2 x-text="t('set.app')"></h2>
       <div class="grid2">
         <label><span x-text="t('set.port')"></span>

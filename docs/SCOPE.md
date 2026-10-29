@@ -47,6 +47,12 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
   - It also plays **each time the PC connects**: the app starting, the cable plugged back in, or a reconnect after the link dropped. The PC skips it when the screen says it is already playing it, which is the case right after a power-on.
   - The PC sends and updates the `boot` file like any other. It can be turned off (the file is then deleted), and the friend can replace it in the settings page (same upload and conversion as the event animations).
   - The game start (§5b) uses the same cat by default. When both are the same, the screen keeps one copy and the game start plays the `boot` file.
+- **Idle cat** (decided 2026-10-29): when the PC is not being used, the screen shows the owner's cat (the left one in `images/idle-photo.jpg`, cut out) bouncing off the screen's edges on black, like the old Windows screen savers.
+  - "Not used" is Windows' own idle clock: no keyboard or mouse input (`GetLastInputInfo`, read once a second, nothing hooked). The default is **10 minutes**, editable in settings (1 to 120), with an on/off switch. No cat while music or a video plays (the Now playing source says so). Outside Windows the idle time is unknown, so the cat never shows there, except with the simulator's "Pretend the PC is idle" button.
+  - It bounces off the edges of the cat itself, not of its box, and **turns to face where it goes** (upright going right, upside down going left), easing into the new direction after each bounce. 100 px/s, 150 px wide, full brightness.
+  - **The screen animates it**: the PC sends the cut-out cat once (about 13 kB in flash, the `idle` file) and then only says "idle" or "not idle". Turning a 150×130 sprite each frame is a few milliseconds on the ESP32-S3; if the real frame rate says otherwise, the fallback is turned copies pre-rendered by the PC (72 of them, about 1 MB).
+  - A touch on the cat shows the pages for 1 minute, then the cat comes back if the PC is still idle. That touch does nothing else (no refresh). Event animations play as usual and the cat comes back after them. PC disconnected wins: offline screen and dimming as always.
+  - Built-in only for now: replacing the cat from the settings page can come later.
 - **PC disconnected** after 90 s with no message, and the backlight dims. Full brightness returns on reconnect.
 - **Stale data** badge (rendered by the PC) if the last successful fetch is over 15 min old.
 - Firmware is flashed by the project owner before handing the screen over. The friend never flashes.

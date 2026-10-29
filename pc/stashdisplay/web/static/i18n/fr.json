@@ -235,5 +235,9 @@
   "ev.chars": "Vos personnages",
   "ev.chars.none": "Aucun pour l'instant : ils apparaissent après leur prochain niveau gagné.",
   "ev.chars.hint": "Repérés grâce aux niveaux gagnés. Les joueurs vus entrant dans votre zone sont exclus. Décochez un personnage pour l'ignorer.",
-  "ev.level": "niveau"
+  "ev.level": "niveau",
+  "idle.title": "Écran de veille",
+  "idle.hint": "Quand le PC n'est pas utilisé depuis un moment (ni clavier ni souris, et pas de musique ou de vidéo en cours), l'écran montre le chat qui rebondit. Touchez l'écran pour voir les pages pendant une minute.",
+  "idle.enabled": "Montrer le chat quand le PC est inactif",
+  "idle.minutes": "Après (minutes sans utilisation)"
 }
