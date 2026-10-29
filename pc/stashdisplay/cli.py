@@ -128,6 +128,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         app.start_link()
     app.start_watcher()
     app.start_player(fake=args.fake_media)
+    app.start_idle()
     if first_start:
         tray.open_settings(app)
     if args.no_tray:

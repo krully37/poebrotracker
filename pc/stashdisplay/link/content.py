@@ -1,6 +1,6 @@
 """What the screen should hold: the visible pages' overlays, their backgrounds as screen-ready
 files, where a long press resets something, the event animations (game start, level-up,
-death) and the start animation (power-on, and each time the PC connects)."""
+death), the start animation (power-on, and each time the PC connects) and the idle cat."""
 
 import hashlib
 import io
@@ -26,6 +26,8 @@ STILL_SECONDS = p.STILL_SECONDS  # an image (or a video's still frame, for now) 
 MIN_SECONDS = p.ANIM_MIN_SECONDS  # shorter GIFs loop until then
 MAX_SECONDS = p.ANIM_MAX_SECONDS
 EVENT_LOOPS = {"levelup": 2}  # how many times an event's GIF plays (once if not listed)
+IDLE_SPRITE = "idle.png"  # in ANIM_DIR: the cat cut out of the owner's photo
+IDLE_WIDTH = 150  # px on the screen; the photo's cat is 230 px wide, so never wider than that
 
 
 class ContentBuilder:
@@ -96,6 +98,21 @@ class ContentBuilder:
                 return None
         # The screen plays "boot" on its own at power-on, so that file has a fixed id.
         return p.BOOT_FILE if kind == "boot" else file_id, self.files[file_id], self.seconds[file_id]
+
+    def idle_sprite(self) -> FileContent | None:
+        """The cat that bounces on the screen while the PC is idle: a small overlay-format file."""
+        source = ANIM_DIR / IDLE_SPRITE
+        if not source.is_file():
+            return None
+        key = f"{p.IDLE_FILE}|{source}|{source.stat().st_mtime}"
+        if key not in self.files:
+            with Image.open(source) as im:
+                img = im.convert("RGBA")
+                img = img.crop(img.getbbox())
+                height = round(img.height * IDLE_WIDTH / img.width)
+                img = img.resize((IDLE_WIDTH, height), Image.Resampling.LANCZOS)
+            self.files[key] = FileContent(p.encode_overlay(img), "sprite")
+        return self.files[key]
 
 
 def gif_seconds(data: bytes) -> float:

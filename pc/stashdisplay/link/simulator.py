@@ -2,10 +2,12 @@
 before the hardware arrives. The settings page shows it at /simulator.
 
 It keeps the same state as the firmware: page overlays in "PSRAM" (lost on power cycle),
-files in "flash" (kept), the current page, touch gestures, and the offline timer.
+files in "flash" (kept), the current page, touch gestures, the offline timer, and the idle cat.
 """
 
 import io
+import math
+import random
 import threading
 import time
 from collections.abc import Callable
@@ -46,6 +48,7 @@ class SimScreen:
             # (file, overlay, start, until, over the page)
             self.anim: tuple[str | None, str | None, float, float, bool] | None = None
             self.touch: dict | None = None
+            self.idle: dict | None = None  # the bouncing cat while the PC is idle
             self.event_seq = 0
             self.pending_events: dict[int, tuple[bytes, float, int]] = {}  # seq -> (frame, sent, tries)
             self.decoded: dict[str, Image.Image] = {}
@@ -118,6 +121,7 @@ class SimScreen:
         msg = frame.json()
         if t == p.HELLO:
             self.xfers.clear()
+            self.idle = None  # a new connection starts on the pages
             return self.inventory()
         if t == p.PING:
             return {"ok": True}
@@ -130,11 +134,15 @@ class SimScreen:
         if t == p.DELETE:
             self.files.pop(msg["id"], None)
             self.decoded.pop("file:" + msg["id"], None)
+            if self.idle and self.idle["sprite"] == msg["id"]:
+                self.idle = None
             return {"ok": True, "flash_free": self.flash_bytes - self.flash_used()}
         if t == p.PLAY:
             seconds = float(msg.get("seconds", 4))
             self.anim = (msg.get("file"), msg.get("overlay"), now, now + seconds, bool(msg.get("over_page")))
             return {"ok": True}
+        if t == p.IDLE:
+            return self._set_idle(msg.get("sprite"), now)
         return {"ok": False, "error": "unknown_type"}
 
     def _set_pages(self, pages: list[dict]) -> dict:
@@ -146,6 +154,22 @@ class SimScreen:
         order = [pg["id"] for pg in self.pages]
         self.current = order.index(current_id) if current_id in order else 0
         self.slide = None
+        return {"ok": True}
+
+    def _set_idle(self, sprite: str | None, now: float) -> dict:
+        if sprite is None:
+            self.idle = None
+            return {"ok": True}
+        f = self.files.get(sprite)
+        if f is None or f["format"] != "sprite":
+            return {"ok": False, "error": "no_file"}
+        if self.idle and self.idle["sprite"] == sprite:
+            return {"ok": True}  # already bouncing: carry on from where it is
+        # From the middle, in a random diagonal direction, already facing it.
+        heading = math.radians(random.uniform(20, 70) + 90 * random.randrange(4))
+        vx, vy = p.IDLE_SPEED * math.cos(heading), p.IDLE_SPEED * math.sin(heading)
+        self.idle = {"sprite": sprite, "x": WIDTH / 2, "y": HEIGHT / 2, "vx": vx, "vy": vy,
+                     "angle": _facing(vx, vy), "t": now, "turned": None}
         return {"ok": True}
 
     def _begin(self, msg: dict) -> dict:
@@ -167,6 +191,8 @@ class SimScreen:
             self.files[xfer["id"]] = {"data": blob, "crc": xfer["crc"], "size": len(blob),
                                       "format": xfer.get("format", "jpeg")}
             self.decoded.pop("file:" + xfer["id"], None)
+            if self.idle and self.idle["sprite"] == xfer["id"]:
+                self.idle["turned"] = None  # a new cat: turn the new one
             return {"ok": True, "flash_free": self.flash_bytes - self.flash_used()}
         p.decode_overlay(blob)  # reject garbage now rather than at draw time
         self.overlays[xfer["id"]] = (xfer["crc"], blob)
@@ -195,6 +221,11 @@ class SimScreen:
                     else:
                         self.pending_events[seq] = (raw, now, tries + 1)
                         self.send(raw)
+            if self.idle:
+                if self.online(now):
+                    self._idle_step(now)
+                else:
+                    self.idle = None  # the PC went away: the offline screen, as always
             touch = self.touch
             if touch and not touch["moved"] and not touch["done"] and self.pages:
                 held = now - touch["t0"]
@@ -208,6 +239,48 @@ class SimScreen:
             if self.anim and now >= self.anim[3]:
                 self.anim = None
 
+    def _idle_step(self, now: float) -> None:
+        """Move the cat, turn it towards where it goes, and bounce it off the edges of what shows."""
+        st = self.idle
+        dt, st["t"] = min(0.1, now - st["t"]), now
+        if dt <= 0:
+            return
+        turn = (_facing(st["vx"], st["vy"]) - st["angle"] + 180) % 360 - 180
+        st["angle"] += turn * (1 - math.exp(-dt / p.IDLE_TURN))
+        left, top, right, bottom = self._idle_extents()
+        st["x"] += st["vx"] * dt
+        st["y"] += st["vy"] * dt
+        if (st["x"] - left < 0 and st["vx"] < 0) or (st["x"] + right > WIDTH and st["vx"] > 0):
+            st["vx"] = -st["vx"]
+        if (st["y"] - top < 0 and st["vy"] < 0) or (st["y"] + bottom > HEIGHT and st["vy"] > 0):
+            st["vy"] = -st["vy"]
+        # Turning changes its outline: keep all of it on the screen.
+        st["x"] = min(max(st["x"], left), WIDTH - right)
+        st["y"] = min(max(st["y"], top), HEIGHT - bottom)
+
+    def _idle_turned(self) -> Image.Image:
+        """The sprite turned to its current angle (to the nearest degree, like the firmware)."""
+        st = self.idle
+        angle = round(st["angle"]) % 360
+        if st["turned"] is None or st["turned"][0] != angle:
+            key = "sprite:" + self.files[st["sprite"]]["crc"]  # a new sprite under the same id decodes again
+            if key not in self.decoded:
+                self.decoded[key] = p.decode_overlay(self.files[st["sprite"]]["data"])
+            st["turned"] = (angle, self.decoded[key].rotate(angle, Image.Resampling.BICUBIC, expand=True))
+        return st["turned"][1]
+
+    def _idle_extents(self) -> tuple[float, float, float, float]:
+        """How far the visible cat reaches left, up, right and down from its centre."""
+        img = self._idle_turned()
+        x0, y0, x1, y1 = img.getchannel("A").getbbox() or (0, 0, img.width, img.height)
+        return img.width / 2 - x0, img.height / 2 - y0, x1 - img.width / 2, y1 - img.height / 2
+
+    def _idle_frame(self) -> Image.Image:
+        img = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 255))
+        cat = self._idle_turned()
+        img.alpha_composite(cat, (round(self.idle["x"] - cat.width / 2), round(self.idle["y"] - cat.height / 2)))
+        return img.convert("RGB")
+
     def online(self, now: float) -> bool:
         return self.last_rx is not None and now - self.last_rx < p.OFFLINE_AFTER
 
@@ -218,9 +291,10 @@ class SimScreen:
 
     def touch_down(self, x: float, y: float) -> None:
         with self.lock:
-            zone = self._zone_at(x, y)
+            wake = self.idle is not None and self.anim is None
+            zone = None if wake else self._zone_at(x, y)
             self.touch = {"t0": self.clock(), "x0": x, "y0": y, "x": x, "y": y,
-                          "moved": False, "done": False, "zone": zone}
+                          "moved": False, "done": False, "zone": zone, "wake": wake}
 
     def touch_move(self, x: float, y: float) -> None:
         with self.lock:
@@ -235,6 +309,11 @@ class SimScreen:
         with self.lock:
             self.touch_move(x, y)
             t, self.touch = self.touch, None
+            if t and t["wake"]:
+                # Any touch on the cat brings the pages back; the PC keeps the cat away for a while.
+                self.idle = None
+                self._event({"type": "wake", "page": self._page_id()})
+                return
             if not t or t["done"] or not self.pages:
                 return
             now = self.clock()
@@ -282,6 +361,8 @@ class SimScreen:
                 return img if self.online(now) or file_id == "boot" else _dim(img)
             if not self.online(now) or not self.pages:
                 return _dim(offline_screen(self.last_rx is not None))
+            if self.idle:
+                return self._idle_frame()
             if self.slide:
                 old, new, start = self.slide
                 progress = _ease(min(1.0, (now - start) / p.SLIDE_SECONDS))
@@ -354,6 +435,12 @@ class SimScreen:
 
 
 # --- Helpers ---------------------------------------------------------------------------------
+
+def _facing(vx: float, vy: float) -> float:
+    """The angle (PIL's, counter-clockwise in degrees) that points the cat's head along its travel:
+    upright going right, upside down going left."""
+    return -math.degrees(math.atan2(vy, vx))
+
 
 def _holds(zone: dict | None) -> bool:
     """A long-press zone (the default), as opposed to a tap zone."""

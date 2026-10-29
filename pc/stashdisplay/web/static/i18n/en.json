@@ -153,5 +153,9 @@
   "ev.chars": "Your characters",
   "ev.chars.none": "None yet: they appear here after their next level-up.",
   "ev.chars.hint": "Learned from level-ups. Players seen joining your area are left out. Untick a character to ignore it.",
-  "ev.level": "level"
+  "ev.level": "level",
+  "idle.title": "Idle screen",
+  "idle.hint": "When the PC has not been used for a while (no keyboard or mouse, and no music or video playing), the screen shows the cat bouncing around. Touch the screen to see the pages for a minute.",
+  "idle.enabled": "Show the cat when the PC is idle",
+  "idle.minutes": "After (minutes without use)"
 }

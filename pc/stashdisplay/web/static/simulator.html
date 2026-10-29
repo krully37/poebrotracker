@@ -38,6 +38,8 @@
       <button class="btn" id="cable">Unplug the cable</button>
       <button class="btn" id="power">Power cycle</button>
       <p class="hint">Unplugged, the screen switches to "PC disconnected" and dims after 90 s, like the real one. A power cycle loses the pages kept in memory but keeps the stored backgrounds.</p>
+      <button class="btn" id="idle">Pretend the PC is idle</button>
+      <p class="hint">Shows the idle cat now instead of after the minutes set in Settings. A click on the cat brings the pages back for a minute. Music playing keeps the cat away.</p>
       <h2>Game log</h2>
       <p class="hint">Adds a line to a test Client.txt, as the game would. The app reads it like the real one.</p>
       <button class="btn" data-log="launch">The game starts</button>
@@ -78,6 +80,8 @@
   document.getElementById("cable").onclick = async () => { show(await post("/api/sim/cable", { plugged: !plugged })); };
   document.querySelectorAll("[data-log]").forEach((b) => { b.onclick = () => post("/api/sim/log", { kind: b.dataset.log }); });
   document.getElementById("power").onclick = async () => { show(await post("/api/sim/power")); };
+  let idleForced = false;
+  document.getElementById("idle").onclick = async () => { show(await post("/api/sim/idle", { idle: !idleForced })); };
 
   function show(s) {
     const sim = s.sim || {};
@@ -92,6 +96,8 @@
     document.getElementById("sync").textContent = s.last_sync ? new Date(s.last_sync * 1000).toLocaleTimeString() : "never";
     if (s.error) document.getElementById("sync").textContent += ` · ${s.error}`;
     document.getElementById("cable").textContent = plugged ? "Unplug the cable" : "Plug the cable back in";
+    idleForced = !!(s.idle && s.idle.forced);
+    document.getElementById("idle").textContent = idleForced ? "Stop pretending the PC is idle" : "Pretend the PC is idle";
   }
 
   async function poll() {

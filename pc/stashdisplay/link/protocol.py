@@ -31,10 +31,11 @@ DELETE = 0x06  # {"id"}: delete a file from flash
 PLAY = 0x07  # {"file"?, "overlay"?, "seconds", "over_page"?}: event animation, full screen or over the page
 PING = 0x08  # {}: heartbeat
 EVENT_ACK = 0x09  # seq = the EVENT being acknowledged
+IDLE = 0x0A  # {"sprite": file id | null}: the PC is idle, bounce this sprite on black; null = back to the pages
 
 # Screen -> PC.
 ACK = 0x81  # seq = the frame being acknowledged; {"ok": bool, "error"?, ...}
-EVENT = 0x82  # {"type": "tap"|"reset"|"page", "page", "action"?}; the PC answers EVENT_ACK
+EVENT = 0x82  # {"type": "tap"|"reset"|"page"|"wake", "page", "action"?}; the PC answers EVENT_ACK
 LOG = 0x83  # {"text"}: debug output, not acknowledged
 
 NAMES = {v: k for k, v in globals().items() if k.isupper() and isinstance(v, int) and k not in
@@ -250,3 +251,8 @@ BOOT_FILE = "boot"
 ANIM_MIN_SECONDS = 3.0
 ANIM_MAX_SECONDS = 10.0
 STILL_SECONDS = 4.0
+# The idle cat: a sprite file (overlay format) that bounces off the screen's edges on black,
+# turning to face where it goes. The edges are those of its visible pixels, as turned.
+IDLE_FILE = "idle"
+IDLE_SPEED = 100.0  # px/s
+IDLE_TURN = 0.25  # s: time constant of the turn towards the new direction after a bounce
