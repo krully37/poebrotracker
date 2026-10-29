@@ -23,3 +23,4 @@ firmware/.vscode/
 Thumbs.db
 preview/
 *.egg-info/
+firmware/bench_data/

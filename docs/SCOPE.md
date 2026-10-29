@@ -51,7 +51,9 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
 - **Stale data** badge (rendered by the PC) if the last successful fetch is over 15 min old.
 - Firmware is flashed by the project owner before handing the screen over. The friend never flashes.
 
-Frame rate for slides and animated backgrounds is **unknown until the hardware arrives**. Community reports show software rotation is the bottleneck: about 4 fps with a naive approach. The plan is to rotate in internal SRAM strips and push with DMA, and to measure this first.
+Frame rates, measured in step 5 (2026-10-29, numbers in §9): a full frame goes to the panel at **61 fps**, and an overlay composited over a background at **27 fps** so far. The composite is now the slow part; step 6 speeds it up (skip see-through rows, both cores).
+
+**Rotation** is left aside for now (owner, 2026-10-29). The panel is portrait (320×480). Standing in landscape as delivered, the panel's top edge is on the left: landscape x = panel y, landscape y = 319 − panel x. Touch reports panel coordinates, the same as the image.
 
 ## 4. Pages and widgets
 
@@ -172,7 +174,7 @@ Decided 2026-10-27.
 | Page rendering | Pillow; PoE look (§4b); bundled open-licence fonts as fallback | The same code produces the preview and the screen image |
 | Settings page | Flask + Waitress, Alpine.js bundled, no build step (see §4c) | Stable, nothing to install, and it opens in any browser |
 | Overlay transfer | RGB565 + 4-bit alpha, zlib-compressed, sent in chunks over USB serial | The ESP32 ROM has zlib inflate built in. Mostly-transparent overlays compress very well |
-| Firmware | Arduino core 3.x + Arduino_GFX (panel driver only), own compositor, JPEGDEC / AnimatedGIF (bitbank2) for media | No LVGL: it wouldn't be faster here, and the PC now does the layout |
+| Firmware | Arduino core 3.x + Arduino_GFX (panel init only), own DMA pixel push, own compositor, own USB serial driver, JPEGDEC / AnimatedGIF (bitbank2) for media | No LVGL: it wouldn't be faster here, and the PC now does the layout. Arduino_GFX's own push is 28 fps against 61, and Arduino's USB Serial loses bytes (§9) |
 | Filesystem on screen | LittleFS | Standard on ESP32, survives power loss |
 
 ## 9. Open questions
@@ -181,8 +183,22 @@ Decided 2026-10-27.
 - What the friends' pricer is and how it exposes prices (local app? file? HTTP?).
 - `Client.txt` line formats: **checked on 2026-10-27 against a real English-client log** (the owner's, Steam install, March to August 2026, 166k lines). All 333 level-up lines and every "has been slain." system line match; chat lines with "died" or "slain" are ignored. Party members' level-ups and deaths **do** appear there; all of the ~20 other players in that log were also seen joining or leaving the area, so none was learned as an own character (zero false animations). Non-Latin names (Chinese, Korean, Cyrillic) parse fine. The friend's client is in English too (confirmed 2026-10-27), so no other language is needed.
 - Windows checks on 2026-10-27 (no screen): tests pass on Python 3.13; `Client.txt` was found through Steam's registry key and `libraryfolders.vdf` on another drive; the simulator and the fake log events work; the DPAPI vault round-trips. Real USB is still untested.
-- Real frame rate for slides, GIF and video (measured as soon as the hardware arrives).
-- USB on the board: **settled 2026-10-29, native USB.** The USB-C port goes straight to the ESP32-S3's USB-Serial/JTAG (`VID_303A&PID_1001`, no CH340). Windows 11 loads its built-in USB serial driver on its own (COM port plus a "USB JTAG/serial debug unit"), so the friend installs no driver. Transfer speed is still to be measured in step 5.
+- Hardware: **checked 2026-10-29** with the bench firmware (`firmware/README.md`). ESP32-S3 rev 0.2, 16 MB flash, 8 MB PSRAM. The pins in `firmware/lib/board/board.h` work: panel, backlight, and touch at I2C 0x3B, which covers the whole panel (corners read 12–310 × 14–461). Colours are right (no red/blue swap). The factory firmware is backed up outside the repo (`H:\dev\bropoetracker-factory-backup\`, owner's Windows PC; restore with `esptool write-flash 0 <file>`).
+- Speeds, **measured 2026-10-29** at 240 MHz, built with `-O2` (this platform passes no `-O` flag by default, which made everything 2–4× slower):
+
+  | | |
+  |---|---|
+  | Full frame, Arduino_GFX's own push | 28 fps |
+  | Full frame, our DMA strips at **40 MHz** | **61 fps** (the bus alone: 62) |
+  | Same at 80 MHz | 117 fps, but the image is corrupt (dotted text and lines), so the panel stays at 40 MHz. 60 MHz rounds down to 40 |
+  | Overlay over a background (composite only) | 35 ms, so 27 fps with the push |
+  | Overlay unpack (ROM zlib, 23 kB → 384 kB) | 28 ms |
+  | JPEG 480×320 decode (JPEGDEC, S3 SIMD) | 49 ms, about 20 fps of video |
+  | GIF decode, level-up animation | 20 ms a frame (it wants 66) |
+  | USB from the PC, raw / one ACK every 4 kB | 611 / 604 kB/s, nothing lost. A page overlay takes ~40 ms, the level-up GIF ~1.1 s |
+- USB serial: Arduino's `Serial` (HWCDC) pushes each received byte through a FreeRTOS queue from its interrupt and **drops bytes** when the queue is full (143 kB of 200 kB arrived). The firmware uses its own driver (`firmware/lib/board/usblink.h`), reading the USB FIFO directly, so the PC simply waits when the screen is busy.
+- **Closing the COM port resets the board** (the USB-Serial/JTAG reset lines), and so does opening it with DTR/RTS off; opening it with pyserial's defaults does not. To deal with in step 6: the PC app closing (Quit, or a reconnect) restarts the screen, which then plays the start animation.
+- USB on the board: **settled 2026-10-29, native USB.** The USB-C port goes straight to the ESP32-S3's USB-Serial/JTAG (`VID_303A&PID_1001`, no CH340). Windows 11 loads its built-in USB serial driver on its own (COM port plus a "USB JTAG/serial debug unit"), so the friend installs no driver. Transfer speed: see the speeds below.
 - XP/hour: register an app with GGG's developer program (see §6), and whether that registration is approved.
 
 ## 10. Build order
@@ -192,7 +208,7 @@ Decided 2026-10-27.
 3. Settings page with live preview and page editor.
 4. Serial protocol (overlay transfer, file transfer to the screen's flash, touch events, heartbeat), tested against a simulated screen on the PC. The simulator is also a page in the settings app: the screen exactly as the firmware will composite it, driven with the mouse. The protocol is specified in `docs/PROTOCOL.md`.
 4b. `Client.txt` event watcher (level-up, death), tested against sample log lines, then a real log.
-5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates.
+5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates. **Done 2026-10-29** (§9).
 6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds, and the boot animation.
 7. WealthyExile reverse-engineering (with your friend logged in), then the adapter.
 8. Windows .exe, auto-start, install guide; final test on a Windows PC.
