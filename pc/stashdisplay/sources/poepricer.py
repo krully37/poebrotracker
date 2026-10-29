@@ -3,9 +3,12 @@
 It runs on 127.0.0.1:5175 by default, or on another machine (`poepricer.url` in the settings).
 Its API needs no login. What is used here (docs/SCOPE.md §6 and §9):
 - `GET /api/ping` → {"app": "poe-pricer"}: is it there
-- `GET /api/wealth?league=&hours=` → each tab's value over time, in chaos (`series[].last` is now)
+- `GET /api/wealth/families?league=&hours=` → the bulk items' value per family (Currency, Scarab,
+  DivinationCard...), in chaos (`series[].last` is now)
+- `GET /api/wealth?league=&hours=` → each tab's value, in chaos: only its unique tabs are used
 - `GET /api/rates?league=` → {"divineToChaos"}: the divine price, the first source for it
-Only reads: nothing here asks it to price, scan or refresh anything.
+The total is the bulk items plus the uniques; rares and gear are left out, too hard to price
+(owner, 2026-10-29). Only reads: nothing here asks it to price, scan or refresh anything.
 """
 
 import time
@@ -44,13 +47,24 @@ def divine_price(league: str, base: str = DEFAULT_URL, session=None) -> float | 
     return float(rate) if rate and rate > 0 else None
 
 
-def fetch(league: str, base: str = DEFAULT_URL, session=None, now: float | None = None) -> Snapshot:
-    """The stash as PoE Pricer last read it: its tabs' values, in divines. No items: its item
-    list is per tab and is left for later."""
+def is_unique_tab(name: str, words: str) -> bool:
+    """A tab of uniques, by its name: it holds one of `words` (comma-separated, any case)."""
+    return any(w.strip().lower() in name.lower() for w in words.split(",") if w.strip())
+
+
+def fetch(league: str, base: str = DEFAULT_URL, session=None, now: float | None = None,
+          unique_tabs: str = "unique") -> Snapshot:
+    """The stash as PoE Pricer last read it, in divines: one entry per bulk family, plus each tab
+    of uniques. PoE Pricer gives no tab types, so unique tabs are found by name. No items: its
+    item list is per tab and is left for later."""
     now = time.time() if now is None else now
     rate = divine_price(league, base, session)
     if not rate:
         raise SourceError(UNAVAILABLE, "no divine price")
-    wealth = _get(base, "/api/wealth", {"league": league, "hours": 24}, session)
-    tabs = [Tab(s.get("name") or s.get("tabId", "?"), float(s.get("last") or 0) / rate) for s in wealth.get("series", [])]
+    params = {"league": league, "hours": 24}
+    families = _get(base, "/api/wealth/families", params, session).get("series", [])
+    tabs = [Tab(s.get("type", "?"), float(s.get("last") or 0) / rate) for s in families]
+    for s in _get(base, "/api/wealth", params, session).get("series", []):
+        if is_unique_tab(s.get("name") or "", unique_tabs):
+            tabs.append(Tab(s["name"], float(s.get("last") or 0) / rate))
     return Snapshot(total=sum(t.value for t in tabs), time=now, tabs=tabs, div_price=rate, league=league)

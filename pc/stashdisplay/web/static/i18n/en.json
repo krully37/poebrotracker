@@ -152,7 +152,8 @@
   "we.test.changed": "WealthyExile answered, but its page has changed: the app needs an update to read it.",
   "set.source": "Stash from",
   "set.poepricer": "PoE Pricer address",
-  "set.poepricer.hint": "PoE Pricer gives the divine price whenever it answers, and can give the stash instead of WealthyExile.",
+  "set.poepricer.hint": "PoE Pricer gives the divine price whenever it answers. As the stash source it counts the bulk items (currency, scarabs, cards...) and the tabs of uniques named above; rares and gear are left out.",
   "pp.test.ok": "PoE Pricer answers: 1 divine = {divine} chaos in {league}.",
-  "pp.test.fail": "No PoE Pricer at this address."
+  "pp.test.fail": "No PoE Pricer at this address.",
+  "set.unique_tabs": "PoE Pricer: tabs of uniques (names containing)"
 }

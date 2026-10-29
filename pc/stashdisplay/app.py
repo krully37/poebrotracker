@@ -136,7 +136,8 @@ class App:
         url = self.store.settings["poepricer"]["url"]
         try:
             if self.store.settings["source"] == "poe-pricer":
-                snap = poepricer.fetch(self._league(), url, now=now)
+                snap = poepricer.fetch(self._league(), url, now=now,
+                                       unique_tabs=self.store.settings["poepricer"]["unique_tabs"])
             else:
                 snap = wealthyexile.fetch(self.store.cookie, now)
                 # PoE Pricer, when it answers, is the first source for the divine price.

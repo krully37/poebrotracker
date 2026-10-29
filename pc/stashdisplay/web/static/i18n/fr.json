@@ -230,7 +230,8 @@
   "we.test.changed": "WealthyExile a répondu, mais sa page a changé : l'application doit être mise à jour pour la lire.",
   "set.source": "Réserve depuis",
   "set.poepricer": "Adresse de PoE Pricer",
-  "set.poepricer.hint": "PoE Pricer donne le prix de la divine dès qu'il répond, et peut donner la réserve à la place de WealthyExile.",
+  "set.poepricer.hint": "PoE Pricer donne le prix de la divine dès qu'il répond. Comme source de la réserve, il compte les objets en vrac (monnaie, scarabées, cartes...) et les onglets d'uniques nommés ci-dessus ; les objets rares et l'équipement ne comptent pas.",
   "pp.test.ok": "PoE Pricer répond : 1 divine = {divine} chaos en {league}.",
-  "pp.test.fail": "Pas de PoE Pricer à cette adresse."
+  "pp.test.fail": "Pas de PoE Pricer à cette adresse.",
+  "set.unique_tabs": "PoE Pricer : onglets d'uniques (noms contenant)"
 }

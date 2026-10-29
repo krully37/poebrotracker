@@ -1,415 +1,419 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stash Display</title>
-<link rel="stylesheet" href="/static/style.css">
-<script defer src="/static/app.js"></script>
-<script defer src="/static/alpine.min.js"></script>
-</head>
-<body x-data="editor" x-init="init()" :lang="lang" @keydown.window="shortcut($event)">
-
-<template x-if="!loaded">
-  <div class="loading" x-text="loadError || 'Loading…'"></div>
-</template>
-
-<template x-if="loaded">
-<div class="shell">
-
-  <!-- Top bar -->
-  <header class="topbar">
-    <div class="brand">Stash Display</div>
-    <nav class="tabs">
-      <button :class="{active: tab === 'pages'}" @click="tab = 'pages'" x-text="t('tab.pages')"></button>
-      <button :class="{active: tab === 'settings'}" @click="tab = 'settings'" x-text="t('tab.settings')"></button>
-      <template x-if="screen.simulator"><a href="/simulator"><button x-text="t('tab.simulator')"></button></a></template>
-    </nav>
-    <div class="spacer"></div>
-    <span class="badge" :class="screen.state === 'searching' || screen.state === 'off' ? 'demo' : 'live'"
-          :title="screen.error || ''" x-text="t('screen.' + screen.state)"></span>
-    <label class="toggle" :title="t('demo.hint')">
-      <input type="checkbox" x-model="forceDemo">
-      <span x-text="t('demo.force')"></span>
-    </label>
-    <span class="badge" :class="isDemo ? 'demo' : 'live'" x-text="isDemo ? t('data.demo') : t('data.live')"></span>
-    <button class="icon-btn" @click="undo()" :disabled="!history.length" :title="t('undo') + ' (Ctrl+Z)'">↶</button>
-    <button class="icon-btn" @click="redo()" :disabled="!future.length" :title="t('redo') + ' (Ctrl+Y)'">↷</button>
-    <button class="btn" @click="revert()" :disabled="!dirty" x-text="t('revert')"></button>
-    <button class="btn primary" @click="save()" :disabled="!dirty || saving" x-text="saving ? t('saving') : t('save')"></button>
-    <select class="lang" x-model="draft.settings.language">
-      <option value="en">EN</option>
-      <option value="fr">FR</option>
-    </select>
-  </header>
-
-  <!-- Pages tab -->
-  <main class="pages-tab" x-show="tab === 'pages'">
-
-    <!-- Page list -->
-    <aside class="panel page-list">
-      <h2 x-text="t('pages.title')"></h2>
-      <ul>
-        <template x-for="(page, i) in draft.pages" :key="page.id">
-          <li :class="{selected: i === pageIndex, hidden: page.hidden, dragover: dragOver === i}"
-              draggable="true"
-              @dragstart="dragFrom = i" @dragover.prevent="dragOver = i" @dragleave="dragOver = null"
-              @drop.prevent="dropPage(i)" @dragend="dragOver = null"
-              @click="selectPage(i)">
-            <span class="grip">⋮⋮</span>
-            <span class="name" x-text="page.name"></span>
-            <button class="mini" @click.stop="page.hidden = !page.hidden"
-                    :title="page.hidden ? t('pages.show') : t('pages.hide')" x-text="page.hidden ? '◌' : '●'"></button>
-            <button class="mini" @click.stop="duplicatePage(i)" :title="t('pages.duplicate')">⧉</button>
-            <button class="mini" @click.stop="exportPages([page])" :title="t('pages.export')">⤓</button>
-            <button class="mini danger" @click.stop="deletePage(i)" :title="t('pages.delete')"
-                    :disabled="draft.pages.length <= 1">✕</button>
-          </li>
-        </template>
-      </ul>
-      <button class="btn wide" @click="addOpen = true" x-text="'+ ' + t('pages.add')"></button>
-      <div class="list-actions">
-        <label class="btn small">
-          <span x-text="t('pages.import')"></span>
-          <input type="file" accept=".json,application/json" hidden @change="importPages($event)">
-        </label>
-        <button class="btn small" @click="exportPages(draft.pages)" x-text="t('pages.export_all')"></button>
-        <button class="btn small" @click="resetPreset()" x-text="t('pages.reset')"></button>
-      </div>
-    </aside>
-
-    <!-- Preview and page settings -->
-    <section class="center" x-show="page">
-      <div class="screen">
-        <img :src="previewUrl" alt="" x-show="previewUrl" draggable="false">
-        <div class="hit header-hit" :class="{selected: selectedSlot === null}"
-             :style="boxStyle(schema.screen.header)" @click="selectedSlot = null" :title="t('page.settings')"></div>
-        <template x-for="[name, box] in slotsOf(page)" :key="name">
-          <div class="hit" :class="{selected: selectedSlot === name, empty: !page.slots[name]}"
-               :style="boxStyle(box)" @click="selectedSlot = name">
-            <span class="slot-tag" x-text="slotLabel(name)"></span>
-          </div>
-        </template>
-      </div>
-      <p class="hint" x-text="t('preview.hint')"></p>
-
-      <div class="panel page-settings">
-        <h2 x-text="t('page.settings')"></h2>
-        <div class="grid2">
-          <label><span x-text="t('page.name')"></span>
-            <input type="text" x-model="page.name" maxlength="40"></label>
-          <label><span x-text="t('page.template')"></span>
-            <select :value="page.template" @change="changeTemplate($event.target.value)">
-              <template x-for="tpl in schema.templates" :key="tpl.id">
-                <option :value="tpl.id" x-text="tr('template.' + tpl.id + '.name', tpl.name)" :selected="tpl.id === page.template"></option>
-              </template>
-            </select></label>
-        </div>
-        <div class="checks">
-          <span x-text="t('page.header')"></span>
-          <label><input type="checkbox" x-model="page.header.title"> <span x-text="t('page.header.title')"></span></label>
-          <label><input type="checkbox" x-model="page.header.clock"> <span x-text="t('page.header.clock')"></span></label>
-          <label><input type="checkbox" x-model="page.header.synced"> <span x-text="t('page.header.synced')"></span></label>
-        </div>
-
-        <h3 x-text="t('bg.title')"></h3>
-        <div class="grid2">
-          <label><span x-text="t('bg.kind')"></span>
-            <select :value="page.background.kind === 'color' ? 'color' : 'media'" @change="setBackgroundKind($event.target.value)">
-              <option value="color" x-text="t('bg.color')"></option>
-              <option value="media" x-text="t('bg.media')"></option>
-            </select></label>
-          <label x-show="page.background.kind === 'color'"><span x-text="t('bg.color')"></span>
-            <input type="color" x-model="page.background.value"></label>
-          <label x-show="page.background.kind !== 'color'"><span x-text="t('bg.fit')"></span>
-            <select x-model="page.background.fit">
-              <option value="cover" x-text="t('bg.fit.cover')"></option>
-              <option value="contain" x-text="t('bg.fit.contain')"></option>
-            </select></label>
-        </div>
-        <div x-show="page.background.kind !== 'color'">
-          <div class="grid2">
-            <label><span x-text="t('bg.x')"></span><input type="range" min="0" max="100" x-model.number="page.background.x"></label>
-            <label><span x-text="t('bg.y')"></span><input type="range" min="0" max="100" x-model.number="page.background.y"></label>
-          </div>
-          <div class="media-grid">
-            <template x-for="m in media" :key="m.id">
-              <div class="media" :class="{selected: page.background.value === m.id}" @click="useMedia(m)">
-                <img :src="`/api/media/${m.id}/thumb?v=${m.needs_still ? 0 : 1}`" alt="" loading="lazy">
-                <div class="media-info">
-                  <span class="kind" x-text="t('bg.kind.' + m.kind)"></span>
-                  <span x-text="(m.bytes / 1048576).toFixed(1) + ' MB'"></span>
-                  <button class="mini danger" @click.stop="deleteMedia(m)" :title="t('bg.delete')">✕</button>
-                </div>
-              </div>
-            </template>
-            <label class="media upload">
-              <span x-text="uploading ? t('bg.uploading') : '+ ' + t('bg.upload')"></span>
-              <input type="file" accept="image/*,video/*" hidden @change="uploadMedia($event)" :disabled="uploading">
-            </label>
-          </div>
-          <p class="hint" x-text="t('bg.hint')"></p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Slot editor -->
-    <aside class="panel slot-editor" x-show="page">
-      <template x-if="selectedSlot === null">
-        <div>
-          <h2 x-text="t('slot.none')"></h2>
-          <p class="hint" x-text="t('slot.pick')"></p>
-          <h3 x-text="t('help.placeholders')"></h3>
-          <p class="hint" x-text="t('help.placeholders.text')"></p>
-          <div class="chips">
-            <template x-for="p in schema.placeholders" :key="p"><code x-text="'{' + p + '}'"></code></template>
-          </div>
-        </div>
-      </template>
-      <template x-if="selectedSlot !== null">
-        <div>
-          <h2 x-text="slotLabel(selectedSlot)"></h2>
-          <label class="field"><span x-text="t('slot.widget')"></span>
-            <select :value="slot ? slot.widget : ''" @change="setWidget($event.target.value)">
-              <option value="" x-text="t('slot.empty')"></option>
-              <template x-for="w in schema.widgets" :key="w.id">
-                <option :value="w.id" x-text="tr('widget.' + w.id + '.name', w.name)" :selected="slot && slot.widget === w.id"></option>
-              </template>
-            </select></label>
-          <template x-if="slot">
-            <div>
-              <p class="hint" x-text="tr('widget.' + slot.widget + '.desc', widgetDef(slot.widget).description)"></p>
-              <label class="field"><span x-text="t('slot.frame')"></span>
-                <select x-model="slot.frame">
-                  <template x-for="f in schema.frames" :key="f">
-                    <option :value="f" x-text="t('frame.' + f)" :selected="slot.frame === f"></option>
-                  </template>
-                </select></label>
-              <template x-for="opt in widgetDef(slot.widget).options" :key="slot.widget + opt.key">
-                <div class="field">
-                  <span x-text="optLabel(slot.widget, opt)"></span>
-                  <!-- metric / choice -->
-                  <template x-if="opt.kind === 'metric' || opt.kind === 'choice'">
-                    <select x-model="slot[opt.key]">
-                      <template x-for="c in opt.choices" :key="c">
-                        <option :value="c" x-text="choiceLabel(opt, c)" :selected="slot[opt.key] === c"></option>
-                      </template>
-                    </select>
-                  </template>
-                  <template x-if="opt.kind === 'font'">
-                    <select x-model="slot[opt.key]">
-                      <template x-for="f in schema.fonts" :key="f"><option :value="f" x-text="f" :selected="slot[opt.key] === f"></option></template>
-                    </select>
-                  </template>
-                  <template x-if="opt.kind === 'weight'">
-                    <select x-model.number="slot[opt.key]">
-                      <template x-for="w in [300, 400, 500, 600, 700, 800]" :key="w">
-                        <option :value="w" x-text="w" :selected="slot[opt.key] === w"></option>
-                      </template>
-                    </select>
-                  </template>
-                  <template x-if="opt.kind === 'text'">
-                    <input type="text" x-model="slot[opt.key]" :list="opt.key === 'name' ? 'item-suggestions' : null"
-                           @input="opt.key === 'name' && suggestItems($event.target.value)">
-                  </template>
-                  <template x-if="opt.kind === 'multiline'">
-                    <textarea rows="7" x-model="slot[opt.key]"></textarea>
-                  </template>
-                  <template x-if="opt.kind === 'int'">
-                    <input type="number" x-model.number="slot[opt.key]" :min="opt.minimum" :max="opt.maximum">
-                  </template>
-                  <template x-if="opt.kind === 'bool'">
-                    <input type="checkbox" x-model="slot[opt.key]">
-                  </template>
-                  <template x-if="opt.kind === 'color'">
-                    <div class="color-row">
-                      <label x-show="slot.widget !== 'sparkline'"><input type="checkbox" :checked="slot[opt.key] === 'auto'"
-                             @change="slot[opt.key] = $event.target.checked ? 'auto' : '#F2F2F2'"> <span x-text="t('color.auto')"></span></label>
-                      <input type="color" x-show="slot[opt.key] !== 'auto'" x-model="slot[opt.key]">
-                    </div>
-                  </template>
-                  <template x-if="opt.kind === 'items'">
-                    <div>
-                      <div class="chips">
-                        <template x-for="(item, n) in slot[opt.key]" :key="item + n">
-                          <span class="chip">
-                            <img :src="'/api/icon?name=' + encodeURIComponent(item)" alt="" onerror="this.style.display='none'">
-                            <span x-text="item"></span>
-                            <button class="mini" @click="slot[opt.key].splice(n, 1)">✕</button>
-                          </span>
-                        </template>
-                      </div>
-                      <input type="text" list="item-suggestions" :placeholder="t('items.add')"
-                             @input="suggestItems($event.target.value)"
-                             @keydown.enter.prevent="addItem(slot[opt.key], $event.target)"
-                             @change="addItem(slot[opt.key], $event.target)">
-                    </div>
-                  </template>
-                </div>
-              </template>
-            </div>
-          </template>
-        </div>
-      </template>
-      <datalist id="item-suggestions">
-        <template x-for="s in suggestions" :key="s"><option :value="s"></option></template>
-      </datalist>
-    </aside>
-  </main>
-
-  <!-- Settings tab -->
-  <main class="settings-tab" x-show="tab === 'settings'">
-    <section class="panel">
-      <h2>WealthyExile
-        <span class="help" tabindex="0" :aria-label="t('we.howto.title')">?
-          <span class="help-box" role="tooltip">
-            <strong x-text="t('we.howto.title')"></strong>
-            <ol>
-              <template x-for="n in [1, 2, 3, 4, 5, 6]" :key="n"><li x-text="t('we.howto.' + n)"></li></template>
-            </ol>
-            <span x-text="t('we.howto.warning')"></span>
-          </span>
-        </span>
-      </h2>
-      <p class="hint" x-text="t('we.hint')"></p>
-      <div class="cookie-row">
-        <input type="password" x-model="cookieInput" :placeholder="hasCookie ? t('we.cookie.saved') : t('we.cookie.paste')" autocomplete="off">
-        <button class="btn" @click="saveCookie()" :disabled="!cookieInput" x-text="t('we.cookie.save')"></button>
-        <button class="btn" @click="testCookie()" :disabled="!hasCookie" x-text="t('we.cookie.test')"></button>
-        <button class="btn danger" @click="clearCookie()" x-show="hasCookie" x-text="t('we.cookie.clear')"></button>
-      </div>
-      <p class="status" :class="cookieStatus.kind" x-show="cookieStatus.text" x-text="cookieStatus.text"></p>
-      <p class="hint" x-text="t('we.cookie.note')"></p>
-    </section>
-
-    <section class="panel">
-      <h2 x-text="t('set.data')"></h2>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stash Display</title>
+<link rel="stylesheet" href="/static/style.css">
+<script defer src="/static/app.js"></script>
+<script defer src="/static/alpine.min.js"></script>
+</head>
+<body x-data="editor" x-init="init()" :lang="lang" @keydown.window="shortcut($event)">
+
+<template x-if="!loaded">
+  <div class="loading" x-text="loadError || 'Loading…'"></div>
+</template>
+
+<template x-if="loaded">
+<div class="shell">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="brand">Stash Display</div>
+    <nav class="tabs">
+      <button :class="{active: tab === 'pages'}" @click="tab = 'pages'" x-text="t('tab.pages')"></button>
+      <button :class="{active: tab === 'settings'}" @click="tab = 'settings'" x-text="t('tab.settings')"></button>
+      <template x-if="screen.simulator"><a href="/simulator"><button x-text="t('tab.simulator')"></button></a></template>
+    </nav>
+    <div class="spacer"></div>
+    <span class="badge" :class="screen.state === 'searching' || screen.state === 'off' ? 'demo' : 'live'"
+          :title="screen.error || ''" x-text="t('screen.' + screen.state)"></span>
+    <label class="toggle" :title="t('demo.hint')">
+      <input type="checkbox" x-model="forceDemo">
+      <span x-text="t('demo.force')"></span>
+    </label>
+    <span class="badge" :class="isDemo ? 'demo' : 'live'" x-text="isDemo ? t('data.demo') : t('data.live')"></span>
+    <button class="icon-btn" @click="undo()" :disabled="!history.length" :title="t('undo') + ' (Ctrl+Z)'">↶</button>
+    <button class="icon-btn" @click="redo()" :disabled="!future.length" :title="t('redo') + ' (Ctrl+Y)'">↷</button>
+    <button class="btn" @click="revert()" :disabled="!dirty" x-text="t('revert')"></button>
+    <button class="btn primary" @click="save()" :disabled="!dirty || saving" x-text="saving ? t('saving') : t('save')"></button>
+    <select class="lang" x-model="draft.settings.language">
+      <option value="en">EN</option>
+      <option value="fr">FR</option>
+    </select>
+  </header>
+
+  <!-- Pages tab -->
+  <main class="pages-tab" x-show="tab === 'pages'">
+
+    <!-- Page list -->
+    <aside class="panel page-list">
+      <h2 x-text="t('pages.title')"></h2>
+      <ul>
+        <template x-for="(page, i) in draft.pages" :key="page.id">
+          <li :class="{selected: i === pageIndex, hidden: page.hidden, dragover: dragOver === i}"
+              draggable="true"
+              @dragstart="dragFrom = i" @dragover.prevent="dragOver = i" @dragleave="dragOver = null"
+              @drop.prevent="dropPage(i)" @dragend="dragOver = null"
+              @click="selectPage(i)">
+            <span class="grip">⋮⋮</span>
+            <span class="name" x-text="page.name"></span>
+            <button class="mini" @click.stop="page.hidden = !page.hidden"
+                    :title="page.hidden ? t('pages.show') : t('pages.hide')" x-text="page.hidden ? '◌' : '●'"></button>
+            <button class="mini" @click.stop="duplicatePage(i)" :title="t('pages.duplicate')">⧉</button>
+            <button class="mini" @click.stop="exportPages([page])" :title="t('pages.export')">⤓</button>
+            <button class="mini danger" @click.stop="deletePage(i)" :title="t('pages.delete')"
+                    :disabled="draft.pages.length <= 1">✕</button>
+          </li>
+        </template>
+      </ul>
+      <button class="btn wide" @click="addOpen = true" x-text="'+ ' + t('pages.add')"></button>
+      <div class="list-actions">
+        <label class="btn small">
+          <span x-text="t('pages.import')"></span>
+          <input type="file" accept=".json,application/json" hidden @change="importPages($event)">
+        </label>
+        <button class="btn small" @click="exportPages(draft.pages)" x-text="t('pages.export_all')"></button>
+        <button class="btn small" @click="resetPreset()" x-text="t('pages.reset')"></button>
+      </div>
+    </aside>
+
+    <!-- Preview and page settings -->
+    <section class="center" x-show="page">
+      <div class="screen">
+        <img :src="previewUrl" alt="" x-show="previewUrl" draggable="false">
+        <div class="hit header-hit" :class="{selected: selectedSlot === null}"
+             :style="boxStyle(schema.screen.header)" @click="selectedSlot = null" :title="t('page.settings')"></div>
+        <template x-for="[name, box] in slotsOf(page)" :key="name">
+          <div class="hit" :class="{selected: selectedSlot === name, empty: !page.slots[name]}"
+               :style="boxStyle(box)" @click="selectedSlot = name">
+            <span class="slot-tag" x-text="slotLabel(name)"></span>
+          </div>
+        </template>
+      </div>
+      <p class="hint" x-text="t('preview.hint')"></p>
+
+      <div class="panel page-settings">
+        <h2 x-text="t('page.settings')"></h2>
+        <div class="grid2">
+          <label><span x-text="t('page.name')"></span>
+            <input type="text" x-model="page.name" maxlength="40"></label>
+          <label><span x-text="t('page.template')"></span>
+            <select :value="page.template" @change="changeTemplate($event.target.value)">
+              <template x-for="tpl in schema.templates" :key="tpl.id">
+                <option :value="tpl.id" x-text="tr('template.' + tpl.id + '.name', tpl.name)" :selected="tpl.id === page.template"></option>
+              </template>
+            </select></label>
+        </div>
+        <div class="checks">
+          <span x-text="t('page.header')"></span>
+          <label><input type="checkbox" x-model="page.header.title"> <span x-text="t('page.header.title')"></span></label>
+          <label><input type="checkbox" x-model="page.header.clock"> <span x-text="t('page.header.clock')"></span></label>
+          <label><input type="checkbox" x-model="page.header.synced"> <span x-text="t('page.header.synced')"></span></label>
+        </div>
+
+        <h3 x-text="t('bg.title')"></h3>
+        <div class="grid2">
+          <label><span x-text="t('bg.kind')"></span>
+            <select :value="page.background.kind === 'color' ? 'color' : 'media'" @change="setBackgroundKind($event.target.value)">
+              <option value="color" x-text="t('bg.color')"></option>
+              <option value="media" x-text="t('bg.media')"></option>
+            </select></label>
+          <label x-show="page.background.kind === 'color'"><span x-text="t('bg.color')"></span>
+            <input type="color" x-model="page.background.value"></label>
+          <label x-show="page.background.kind !== 'color'"><span x-text="t('bg.fit')"></span>
+            <select x-model="page.background.fit">
+              <option value="cover" x-text="t('bg.fit.cover')"></option>
+              <option value="contain" x-text="t('bg.fit.contain')"></option>
+            </select></label>
+        </div>
+        <div x-show="page.background.kind !== 'color'">
+          <div class="grid2">
+            <label><span x-text="t('bg.x')"></span><input type="range" min="0" max="100" x-model.number="page.background.x"></label>
+            <label><span x-text="t('bg.y')"></span><input type="range" min="0" max="100" x-model.number="page.background.y"></label>
+          </div>
+          <div class="media-grid">
+            <template x-for="m in media" :key="m.id">
+              <div class="media" :class="{selected: page.background.value === m.id}" @click="useMedia(m)">
+                <img :src="`/api/media/${m.id}/thumb?v=${m.needs_still ? 0 : 1}`" alt="" loading="lazy">
+                <div class="media-info">
+                  <span class="kind" x-text="t('bg.kind.' + m.kind)"></span>
+                  <span x-text="(m.bytes / 1048576).toFixed(1) + ' MB'"></span>
+                  <button class="mini danger" @click.stop="deleteMedia(m)" :title="t('bg.delete')">✕</button>
+                </div>
+              </div>
+            </template>
+            <label class="media upload">
+              <span x-text="uploading ? t('bg.uploading') : '+ ' + t('bg.upload')"></span>
+              <input type="file" accept="image/*,video/*" hidden @change="uploadMedia($event)" :disabled="uploading">
+            </label>
+          </div>
+          <p class="hint" x-text="t('bg.hint')"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slot editor -->
+    <aside class="panel slot-editor" x-show="page">
+      <template x-if="selectedSlot === null">
+        <div>
+          <h2 x-text="t('slot.none')"></h2>
+          <p class="hint" x-text="t('slot.pick')"></p>
+          <h3 x-text="t('help.placeholders')"></h3>
+          <p class="hint" x-text="t('help.placeholders.text')"></p>
+          <div class="chips">
+            <template x-for="p in schema.placeholders" :key="p"><code x-text="'{' + p + '}'"></code></template>
+          </div>
+        </div>
+      </template>
+      <template x-if="selectedSlot !== null">
+        <div>
+          <h2 x-text="slotLabel(selectedSlot)"></h2>
+          <label class="field"><span x-text="t('slot.widget')"></span>
+            <select :value="slot ? slot.widget : ''" @change="setWidget($event.target.value)">
+              <option value="" x-text="t('slot.empty')"></option>
+              <template x-for="w in schema.widgets" :key="w.id">
+                <option :value="w.id" x-text="tr('widget.' + w.id + '.name', w.name)" :selected="slot && slot.widget === w.id"></option>
+              </template>
+            </select></label>
+          <template x-if="slot">
+            <div>
+              <p class="hint" x-text="tr('widget.' + slot.widget + '.desc', widgetDef(slot.widget).description)"></p>
+              <label class="field"><span x-text="t('slot.frame')"></span>
+                <select x-model="slot.frame">
+                  <template x-for="f in schema.frames" :key="f">
+                    <option :value="f" x-text="t('frame.' + f)" :selected="slot.frame === f"></option>
+                  </template>
+                </select></label>
+              <template x-for="opt in widgetDef(slot.widget).options" :key="slot.widget + opt.key">
+                <div class="field">
+                  <span x-text="optLabel(slot.widget, opt)"></span>
+                  <!-- metric / choice -->
+                  <template x-if="opt.kind === 'metric' || opt.kind === 'choice'">
+                    <select x-model="slot[opt.key]">
+                      <template x-for="c in opt.choices" :key="c">
+                        <option :value="c" x-text="choiceLabel(opt, c)" :selected="slot[opt.key] === c"></option>
+                      </template>
+                    </select>
+                  </template>
+                  <template x-if="opt.kind === 'font'">
+                    <select x-model="slot[opt.key]">
+                      <template x-for="f in schema.fonts" :key="f"><option :value="f" x-text="f" :selected="slot[opt.key] === f"></option></template>
+                    </select>
+                  </template>
+                  <template x-if="opt.kind === 'weight'">
+                    <select x-model.number="slot[opt.key]">
+                      <template x-for="w in [300, 400, 500, 600, 700, 800]" :key="w">
+                        <option :value="w" x-text="w" :selected="slot[opt.key] === w"></option>
+                      </template>
+                    </select>
+                  </template>
+                  <template x-if="opt.kind === 'text'">
+                    <input type="text" x-model="slot[opt.key]" :list="opt.key === 'name' ? 'item-suggestions' : null"
+                           @input="opt.key === 'name' && suggestItems($event.target.value)">
+                  </template>
+                  <template x-if="opt.kind === 'multiline'">
+                    <textarea rows="7" x-model="slot[opt.key]"></textarea>
+                  </template>
+                  <template x-if="opt.kind === 'int'">
+                    <input type="number" x-model.number="slot[opt.key]" :min="opt.minimum" :max="opt.maximum">
+                  </template>
+                  <template x-if="opt.kind === 'bool'">
+                    <input type="checkbox" x-model="slot[opt.key]">
+                  </template>
+                  <template x-if="opt.kind === 'color'">
+                    <div class="color-row">
+                      <label x-show="slot.widget !== 'sparkline'"><input type="checkbox" :checked="slot[opt.key] === 'auto'"
+                             @change="slot[opt.key] = $event.target.checked ? 'auto' : '#F2F2F2'"> <span x-text="t('color.auto')"></span></label>
+                      <input type="color" x-show="slot[opt.key] !== 'auto'" x-model="slot[opt.key]">
+                    </div>
+                  </template>
+                  <template x-if="opt.kind === 'items'">
+                    <div>
+                      <div class="chips">
+                        <template x-for="(item, n) in slot[opt.key]" :key="item + n">
+                          <span class="chip">
+                            <img :src="'/api/icon?name=' + encodeURIComponent(item)" alt="" onerror="this.style.display='none'">
+                            <span x-text="item"></span>
+                            <button class="mini" @click="slot[opt.key].splice(n, 1)">✕</button>
+                          </span>
+                        </template>
+                      </div>
+                      <input type="text" list="item-suggestions" :placeholder="t('items.add')"
+                             @input="suggestItems($event.target.value)"
+                             @keydown.enter.prevent="addItem(slot[opt.key], $event.target)"
+                             @change="addItem(slot[opt.key], $event.target)">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+      <datalist id="item-suggestions">
+        <template x-for="s in suggestions" :key="s"><option :value="s"></option></template>
+      </datalist>
+    </aside>
+  </main>
+
+  <!-- Settings tab -->
+  <main class="settings-tab" x-show="tab === 'settings'">
+    <section class="panel">
+      <h2>WealthyExile
+        <span class="help" tabindex="0" :aria-label="t('we.howto.title')">?
+          <span class="help-box" role="tooltip">
+            <strong x-text="t('we.howto.title')"></strong>
+            <ol>
+              <template x-for="n in [1, 2, 3, 4, 5, 6]" :key="n"><li x-text="t('we.howto.' + n)"></li></template>
+            </ol>
+            <span x-text="t('we.howto.warning')"></span>
+          </span>
+        </span>
+      </h2>
+      <p class="hint" x-text="t('we.hint')"></p>
+      <div class="cookie-row">
+        <input type="password" x-model="cookieInput" :placeholder="hasCookie ? t('we.cookie.saved') : t('we.cookie.paste')" autocomplete="off">
+        <button class="btn" @click="saveCookie()" :disabled="!cookieInput" x-text="t('we.cookie.save')"></button>
+        <button class="btn" @click="testCookie()" :disabled="!hasCookie" x-text="t('we.cookie.test')"></button>
+        <button class="btn danger" @click="clearCookie()" x-show="hasCookie" x-text="t('we.cookie.clear')"></button>
+      </div>
+      <p class="status" :class="cookieStatus.kind" x-show="cookieStatus.text" x-text="cookieStatus.text"></p>
+      <p class="hint" x-text="t('we.cookie.note')"></p>
+    </section>
+
+    <section class="panel">
+      <h2 x-text="t('set.data')"></h2>
+      <div class="grid2">
+        <label><span x-text="t('set.source')"></span>
+          <select x-model="draft.settings.source">
+            <option value="wealthyexile">WealthyExile</option>
+            <option value="poe-pricer">PoE Pricer</option>
+          </select></label>
+        <label><span x-text="t('set.poepricer')"></span>
+          <span class="cookie-row">
+            <input type="text" x-model="draft.settings.poepricer.url" spellcheck="false">
+            <button class="btn" @click="testPoePricer()" x-text="t('we.cookie.test')"></button>
+          </span></label>
+      </div>
       <div class="grid2">
-        <label><span x-text="t('set.source')"></span>
-          <select x-model="draft.settings.source">
-            <option value="wealthyexile">WealthyExile</option>
-            <option value="poe-pricer">PoE Pricer</option>
-          </select></label>
-        <label><span x-text="t('set.poepricer')"></span>
-          <span class="cookie-row">
-            <input type="text" x-model="draft.settings.poepricer.url" spellcheck="false">
-            <button class="btn" @click="testPoePricer()" x-text="t('we.cookie.test')"></button>
-          </span></label>
+        <label><span x-text="t('set.unique_tabs')"></span>
+          <input type="text" x-model="draft.settings.poepricer.unique_tabs" spellcheck="false"></label>
       </div>
-      <p class="status" :class="pricerStatus.kind" x-show="pricerStatus.text" x-text="pricerStatus.text"></p>
-      <p class="hint" x-text="t('set.poepricer.hint')"></p>
-      <div class="grid2">
-        <label><span x-text="t('set.interval')"></span>
-          <input type="number" min="60" max="3600" x-model.number="draft.settings.interval"></label>
-        <label><span x-text="t('set.min_refresh')"></span>
-          <input type="number" min="30" max="600" x-model.number="draft.settings.min_refresh_interval"></label>
-        <label><span x-text="t('set.rate_window')"></span>
-          <input type="number" min="15" max="360" x-model.number="draft.settings.rate_window_minutes"></label>
-        <label><span x-text="t('set.spark_points')"></span>
-          <input type="number" min="8" max="288" x-model.number="draft.settings.spark_points"></label>
-        <label class="inline"><input type="checkbox" x-model="draft.settings.new_session_on_start">
-          <span x-text="t('set.new_session')"></span></label>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2>poe.ninja</h2>
-      <p class="hint" x-text="t('ninja.hint')"></p>
-      <div class="grid2">
-        <label class="inline"><input type="checkbox" x-model="draft.settings.poeninja.enabled">
-          <span x-text="t('ninja.enabled')"></span></label>
-        <label><span x-text="t('ninja.interval')"></span>
-          <input type="number" min="900" max="86400" x-model.number="draft.settings.poeninja.interval"></label>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2 x-text="t('ev.title')"></h2>
-      <p class="hint" x-text="t('ev.hint')"></p>
-      <label><span x-text="t('ev.log')"></span>
-        <input type="text" x-model="draft.settings.events.client_log" :placeholder="t('ev.log.auto')"></label>
-      <p class="status" :class="events.found ? 'ok' : 'warn'"
-         x-text="events.found ? t('ev.log.found') + ' ' + events.path : t('ev.log.missing')"></p>
-      <template x-for="kind in ['boot', 'launch', 'levelup', 'death']" :key="kind">
-        <div class="event-row">
-          <label class="inline"><input type="checkbox" x-model="draft.settings.events[kind].enabled">
-            <span x-text="t('ev.' + kind)"></span></label>
-          <select x-model="draft.settings.events[kind].media" :disabled="!draft.settings.events[kind].enabled">
-            <option value="" x-text="t('ev.anim.default')"></option>
-            <template x-for="m in media" :key="m.id">
-              <option :value="m.id" :selected="m.id === draft.settings.events[kind].media" x-text="m.name"></option>
-            </template>
-          </select>
-          <label class="btn small">
-            <span x-text="uploading ? t('bg.uploading') : '+ ' + t('bg.upload')"></span>
-            <input type="file" accept="image/*,video/*" hidden :disabled="uploading"
-                   @change="uploadMedia($event, (m) => { draft.settings.events[kind].media = m.id; })">
-          </label>
-          <button class="btn small" @click="testEvent(kind)" x-text="t('ev.test')"></button>
-        </div>
-      </template>
-      <p class="hint" x-text="t('ev.anim.hint')"></p>
-      <h3 x-text="t('ev.chars')"></h3>
-      <p class="hint" x-show="!events.characters.length" x-text="t('ev.chars.none')"></p>
-      <div class="checks">
-        <template x-for="c in events.characters" :key="c.name">
-          <label><input type="checkbox" :checked="c.enabled" @change="setCharacter(c.name, $event.target.checked)">
-            <span x-text="`${c.name} (${c.class}${c.level ? ', ' + t('ev.level') + ' ' + c.level : ''})`"></span></label>
-        </template>
-      </div>
-      <p class="hint" x-show="events.characters.length" x-text="t('ev.chars.hint')"></p>
-    </section>
-
-    <section class="panel">
-      <h2 x-text="t('idle.title')"></h2>
-      <p class="hint" x-text="t('idle.hint')"></p>
-      <div class="grid2">
-        <label class="inline"><input type="checkbox" x-model="draft.settings.idle.enabled">
-          <span x-text="t('idle.enabled')"></span></label>
-        <label><span x-text="t('idle.minutes')"></span>
-          <input type="number" min="1" max="120" x-model.number="draft.settings.idle.minutes"
-                 :disabled="!draft.settings.idle.enabled"></label>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2 x-text="t('set.app')"></h2>
-      <div class="grid2">
-        <label><span x-text="t('set.port')"></span>
-          <input type="text" x-model="draft.settings.serial.port" :placeholder="t('set.port.auto')"></label>
-        <label><span x-text="t('set.web_port')"></span>
-          <input type="number" min="1024" max="65535" x-model.number="draft.settings.web.port"></label>
-        <label class="inline" x-show="autostart.supported">
-          <input type="checkbox" :checked="autostart.enabled" @change="setAutostart($event.target.checked)">
-          <span x-text="t('set.autostart')"></span></label>
-        <p class="hint" x-show="!autostart.supported" x-text="t('set.autostart.unsupported')"></p>
-      </div>
-      <p class="hint" x-text="t('set.web_port.hint')"></p>
-    </section>
-  </main>
-
-  <!-- Add page dialog -->
-  <div class="modal" x-show="addOpen" @click.self="addOpen = false" @keydown.escape.window="addOpen = false">
-    <div class="panel dialog">
-      <h2 x-text="t('pages.add.title')"></h2>
-      <div class="templates">
-        <template x-for="tpl in schema.templates" :key="tpl.id">
-          <button class="template" @click="addPage(tpl.id)">
-            <div class="mini-screen">
-              <template x-for="[name, box] in Object.entries(tpl.slots)" :key="name">
-                <div :style="boxStyle(box)"></div>
-              </template>
-            </div>
-            <strong x-text="tr('template.' + tpl.id + '.name', tpl.name)"></strong>
-            <small x-text="tr('template.' + tpl.id + '.desc', tpl.description)"></small>
-          </button>
-        </template>
-      </div>
-    </div>
-  </div>
-
-  <div class="toast" x-show="toast" x-transition x-text="toast"></div>
-</div>
-</template>
-</body>
-</html>
+      <p class="status" :class="pricerStatus.kind" x-show="pricerStatus.text" x-text="pricerStatus.text"></p>
+      <p class="hint" x-text="t('set.poepricer.hint')"></p>
+      <div class="grid2">
+        <label><span x-text="t('set.interval')"></span>
+          <input type="number" min="60" max="3600" x-model.number="draft.settings.interval"></label>
+        <label><span x-text="t('set.min_refresh')"></span>
+          <input type="number" min="30" max="600" x-model.number="draft.settings.min_refresh_interval"></label>
+        <label><span x-text="t('set.rate_window')"></span>
+          <input type="number" min="15" max="360" x-model.number="draft.settings.rate_window_minutes"></label>
+        <label><span x-text="t('set.spark_points')"></span>
+          <input type="number" min="8" max="288" x-model.number="draft.settings.spark_points"></label>
+        <label class="inline"><input type="checkbox" x-model="draft.settings.new_session_on_start">
+          <span x-text="t('set.new_session')"></span></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>poe.ninja</h2>
+      <p class="hint" x-text="t('ninja.hint')"></p>
+      <div class="grid2">
+        <label class="inline"><input type="checkbox" x-model="draft.settings.poeninja.enabled">
+          <span x-text="t('ninja.enabled')"></span></label>
+        <label><span x-text="t('ninja.interval')"></span>
+          <input type="number" min="900" max="86400" x-model.number="draft.settings.poeninja.interval"></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 x-text="t('ev.title')"></h2>
+      <p class="hint" x-text="t('ev.hint')"></p>
+      <label><span x-text="t('ev.log')"></span>
+        <input type="text" x-model="draft.settings.events.client_log" :placeholder="t('ev.log.auto')"></label>
+      <p class="status" :class="events.found ? 'ok' : 'warn'"
+         x-text="events.found ? t('ev.log.found') + ' ' + events.path : t('ev.log.missing')"></p>
+      <template x-for="kind in ['boot', 'launch', 'levelup', 'death']" :key="kind">
+        <div class="event-row">
+          <label class="inline"><input type="checkbox" x-model="draft.settings.events[kind].enabled">
+            <span x-text="t('ev.' + kind)"></span></label>
+          <select x-model="draft.settings.events[kind].media" :disabled="!draft.settings.events[kind].enabled">
+            <option value="" x-text="t('ev.anim.default')"></option>
+            <template x-for="m in media" :key="m.id">
+              <option :value="m.id" :selected="m.id === draft.settings.events[kind].media" x-text="m.name"></option>
+            </template>
+          </select>
+          <label class="btn small">
+            <span x-text="uploading ? t('bg.uploading') : '+ ' + t('bg.upload')"></span>
+            <input type="file" accept="image/*,video/*" hidden :disabled="uploading"
+                   @change="uploadMedia($event, (m) => { draft.settings.events[kind].media = m.id; })">
+          </label>
+          <button class="btn small" @click="testEvent(kind)" x-text="t('ev.test')"></button>
+        </div>
+      </template>
+      <p class="hint" x-text="t('ev.anim.hint')"></p>
+      <h3 x-text="t('ev.chars')"></h3>
+      <p class="hint" x-show="!events.characters.length" x-text="t('ev.chars.none')"></p>
+      <div class="checks">
+        <template x-for="c in events.characters" :key="c.name">
+          <label><input type="checkbox" :checked="c.enabled" @change="setCharacter(c.name, $event.target.checked)">
+            <span x-text="`${c.name} (${c.class}${c.level ? ', ' + t('ev.level') + ' ' + c.level : ''})`"></span></label>
+        </template>
+      </div>
+      <p class="hint" x-show="events.characters.length" x-text="t('ev.chars.hint')"></p>
+    </section>
+
+    <section class="panel">
+      <h2 x-text="t('idle.title')"></h2>
+      <p class="hint" x-text="t('idle.hint')"></p>
+      <div class="grid2">
+        <label class="inline"><input type="checkbox" x-model="draft.settings.idle.enabled">
+          <span x-text="t('idle.enabled')"></span></label>
+        <label><span x-text="t('idle.minutes')"></span>
+          <input type="number" min="1" max="120" x-model.number="draft.settings.idle.minutes"
+                 :disabled="!draft.settings.idle.enabled"></label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 x-text="t('set.app')"></h2>
+      <div class="grid2">
+        <label><span x-text="t('set.port')"></span>
+          <input type="text" x-model="draft.settings.serial.port" :placeholder="t('set.port.auto')"></label>
+        <label><span x-text="t('set.web_port')"></span>
+          <input type="number" min="1024" max="65535" x-model.number="draft.settings.web.port"></label>
+        <label class="inline" x-show="autostart.supported">
+          <input type="checkbox" :checked="autostart.enabled" @change="setAutostart($event.target.checked)">
+          <span x-text="t('set.autostart')"></span></label>
+        <p class="hint" x-show="!autostart.supported" x-text="t('set.autostart.unsupported')"></p>
+      </div>
+      <p class="hint" x-text="t('set.web_port.hint')"></p>
+    </section>
+  </main>
+
+  <!-- Add page dialog -->
+  <div class="modal" x-show="addOpen" @click.self="addOpen = false" @keydown.escape.window="addOpen = false">
+    <div class="panel dialog">
+      <h2 x-text="t('pages.add.title')"></h2>
+      <div class="templates">
+        <template x-for="tpl in schema.templates" :key="tpl.id">
+          <button class="template" @click="addPage(tpl.id)">
+            <div class="mini-screen">
+              <template x-for="[name, box] in Object.entries(tpl.slots)" :key="name">
+                <div :style="boxStyle(box)"></div>
+              </template>
+            </div>
+            <strong x-text="tr('template.' + tpl.id + '.name', tpl.name)"></strong>
+            <small x-text="tr('template.' + tpl.id + '.desc', tpl.description)"></small>
+          </button>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" x-show="toast" x-transition x-text="toast"></div>
+</div>
+</template>
+</body>
+</html>
