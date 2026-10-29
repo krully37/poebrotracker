@@ -15,7 +15,7 @@ from collections.abc import Callable
 from PIL import Image, ImageDraw, ImageEnhance
 
 from ..render import renderer
-from ..render.theme import GOLD, HEIGHT, WIDTH
+from ..render.theme import GOLD, HEIGHT, HOLD_BAR, WIDTH
 from . import protocol as p
 from .transport import Port
 
@@ -229,7 +229,7 @@ class SimScreen:
             touch = self.touch
             if touch and not touch["moved"] and not touch["done"] and self.pages:
                 held = now - touch["t0"]
-                if _holds(touch["zone"]) and held >= p.PRESS_DELAY + p.RING_FILL:
+                if _holds(touch["zone"]) and held >= p.PRESS_DELAY + p.HOLD_FILL:
                     touch["done"] = True
                     self._event({"type": "reset", "action": touch["zone"]["action"], "page": self._page_id()})
             if self.slide and now - self.slide[2] >= p.SLIDE_SECONDS:
@@ -380,7 +380,10 @@ class SimScreen:
             if self.touch and _holds(self.touch["zone"]) and not self.touch["moved"] and not self.touch["done"]:
                 held = now - self.touch["t0"] - p.PRESS_DELAY
                 if held > 0:
-                    _ring(img, self.touch["x0"], self.touch["y0"], min(1.0, held / p.RING_FILL))
+                    banner = self._overlay(p.HOLD_OVERLAY + self.touch["zone"]["action"])
+                    if banner:
+                        img.alpha_composite(banner)
+                    _hold_bar(img, min(1.0, held / p.HOLD_FILL))
             return img.convert("RGB")
 
     def _page_image(self, index: int, now: float) -> Image.Image:
@@ -488,16 +491,12 @@ def _dim(img: Image.Image) -> Image.Image:
     return ImageEnhance.Brightness(img).enhance(p.DIM_LEVEL)
 
 
-def _ring(img: Image.Image, x: float, y: float, progress: float) -> None:
-    """The long-press ring: a faint circle that fills clockwise from the top."""
-    k, r = 4, p.RING_RADIUS
-    layer = Image.new("L", (img.width * k, img.height * k), 0)
-    d = ImageDraw.Draw(layer)
-    box = ((x - r) * k, (y - r) * k, (x + r) * k, (y + r) * k)
-    d.ellipse(box, outline=70, width=3 * k)
-    d.arc(box, -90, -90 + 360 * progress, fill=255, width=4 * k)
-    mask = layer.resize(img.size, Image.Resampling.LANCZOS)
-    img.paste(Image.new("RGBA", img.size, GOLD), (0, 0), mask)
+def _hold_bar(img: Image.Image, progress: float) -> None:
+    """The reset banner's bar, filled from the left as the hold goes on (the banner is the PC's)."""
+    x, y, w, h = HOLD_BAR
+    filled = int(w * progress)
+    if filled > 0:
+        ImageDraw.Draw(img).rectangle((x, y, x + filled - 1, y + h - 1), fill=GOLD)
 
 
 _offline_cache: dict[bool, Image.Image] = {}

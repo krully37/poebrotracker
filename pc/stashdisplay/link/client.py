@@ -53,6 +53,8 @@ class FileContent:
 class Content:
     pages: list[PageContent]
     files: dict[str, FileContent]
+    # Other overlays the screen keeps, by id (starting with "@"): the reset banners.
+    overlays: dict[str, bytes] = field(default_factory=dict)
 
 
 class ScreenLink:
@@ -228,7 +230,12 @@ class ScreenLink:
              "bg": {"color": pg.bg.get("color", "#000000")} if pg.bg.get("file") in missing_files else pg.bg}
             for pg in content.pages
         ]})
-        for stale in [k for k in have_overlays if k not in {pg.id for pg in content.pages}]:
+        for overlay_id, blob in content.overlays.items():
+            if have_overlays.get(overlay_id) != p.crc_hex(blob):
+                self._transfer("overlay", overlay_id, blob)
+                have_overlays[overlay_id] = p.crc_hex(blob)
+        keep = {pg.id for pg in content.pages} | set(content.overlays)
+        for stale in [k for k in have_overlays if k not in keep]:
             del have_overlays[stale]
         missing_files |= self._upload(anims, have_files)
         self.info["error"] = "Not enough space on the screen for every background and animation" if missing_files else None

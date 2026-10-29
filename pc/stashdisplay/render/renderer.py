@@ -20,7 +20,7 @@ from .draw import Ctx
 from .fonts import NAME_FAMILY, TITLE_FAMILY, font, text_size
 from .fonts import fit as fit_font
 from .templates import HEADER_BOX, TEMPLATES, Box
-from .theme import BACKGROUND, DOTS_Y, FAINT, HEIGHT, LABEL, MUTED, STALE, TITLE, WHITE, WIDTH
+from .theme import BACKGROUND, DOTS_Y, FAINT, FRAME_FILL, FRAME_LINE_DIM, HEIGHT, HOLD_BAR, LABEL, MUTED, STALE, TITLE, WHITE, WIDTH
 from .widgets import NUMBER_FAMILY, WIDGETS, faint_frame, slot_title, without_title
 
 # Above this many pages the screen shows "3/9" instead of dots.
@@ -126,7 +126,7 @@ def preview(page: dict, data: RenderData, index: int, count: int,
 
 
 def toast(text: str) -> Image.Image:
-    """A short message over the page ("Too soon", "Session reset"), as a full-screen overlay."""
+    """A short message over the page ("Session reset", "Div/h reset"), as a full-screen overlay."""
     ctx = Ctx(Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0)), None)  # type: ignore[arg-type]
     f = font(TITLE_FAMILY, 20, 400)
     w = text_size(text, f)[0] + 48
@@ -134,6 +134,21 @@ def toast(text: str) -> Image.Image:
     draw.paint(ctx, "#0A0806", lambda d: d.rectangle((box.x, box.y, box.x + box.w, box.y + box.h), fill=255), alpha=235)
     frames.tooltip(ctx, box)
     draw.text_in(ctx, box, text, f, TITLE, "center")
+    return ctx.img
+
+
+def hold_banner(text: str) -> Image.Image:
+    """Shown while a finger holds on a reset zone ("Resetting div/h"): the text over an empty bar,
+    at the top of the screen. The screen fills the bar (theme.HOLD_BAR) as the hold goes on."""
+    ctx = Ctx(Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0)), None)  # type: ignore[arg-type]
+    bx, by, bw, bh = HOLD_BAR
+    box = Box(bx - 32, 6, bw + 64, by + bh + 12 - 6)
+    draw.paint(ctx, FRAME_FILL, lambda d: d.rectangle((box.x, box.y, box.x + box.w, box.y + box.h), fill=255), alpha=235)
+    frames.tooltip(ctx, box)
+    f = fit_font(text, TITLE_FAMILY, 400, box.w - 24, 20)
+    draw.text_in(ctx, Box(box.x, box.y + 4, box.w, by - box.y - 6), text, f, TITLE, "center")
+    draw.paint(ctx, "#1A1510", lambda d: d.rectangle((bx, by, bx + bw - 1, by + bh - 1), fill=255))
+    draw.paint(ctx, FRAME_LINE_DIM, lambda d: d.rectangle((bx - 1, by - 1, bx + bw, by + bh), outline=255, width=1))
     return ctx.img
 
 

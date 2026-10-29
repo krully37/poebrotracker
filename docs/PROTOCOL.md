@@ -60,13 +60,13 @@ The PC compares this with what it wants on the screen and only sends what differ
 - `bg` is either `{"color": "#rrggbb"}` or `{"file": "<file id>", "color": "#rrggbb"}`. The colour is the fallback if the file is missing.
 - `zones` lists `{"x", "y", "w", "h", "action", "gesture"?}` rectangles the screen reacts to.
   - `"gesture": "hold"` (the default when missing): a long press resets something. `action` is `"reset_session"` or `"reset_rate"`.
-  - `"gesture": "tap"`: a tap runs a button of the media card. `action` is `"media_prev"`, `"media_toggle"` or `"media_next"`. No ring is drawn there, and a long press does nothing.
+  - `"gesture": "tap"`: a tap runs a button of the media card. `action` is `"media_prev"`, `"media_toggle"` or `"media_next"`. No banner shows there, and a long press does nothing.
 - Overlays for pages no longer listed are discarded. The current page is kept by id if it still exists, else the screen shows the first page.
 
 **Transfers:**
 - **Chunks** must arrive in order: the chunk's offset equals the bytes received so far. Otherwise the ACK is `{"ok": false, "error": "offset", "have": n}`, and the PC restarts the transfer.
 - **Kinds:**
-  - `overlay` goes to PSRAM under `id`: a page id, or `@event` for an event animation's text.
+  - `overlay` goes to PSRAM under `id`: a page id, `@event` for an event animation's text, or `@hold-<action>` for the long-press banners (sent with every sync, after the pages). Ids starting with `@` stay when PAGES changes.
   - `file` goes to flash. `BEGIN` is refused with `"no_space"` (plus `flash_free`) when it cannot fit, counting the space a file of the same id would free.
   - `toast` is an overlay shown over the current page for `seconds` (default 2), then forgotten.
 - **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations (`launch`, `levelup`, `death`), `boot` the start animation, `idle` the idle cat. A sync deletes every file the PC no longer wants, `boot` included (since 2026-10-28 the PC sends it like the others). Animations, `boot` included, are sent after the page list, so the pages show up first. An event whose animation is the same as `boot` gets no file of its own: PLAY names `boot`.
@@ -92,9 +92,9 @@ zlib stream (with header) of:
 |---|---|
 | Heartbeat | The PC sends something at least every **30 s** (PING when idle), and re-renders every page once a minute. |
 | Offline | **90 s** without a valid frame: "PC disconnected" screen (built into the firmware), backlight at **30 %**. Any valid frame brings full brightness back. Before the first frame: "Waiting for the PC". |
-| Tap | Under **0.4 s** and within **12 px** of the touch-down point: `EVENT tap`. Inside a tap zone (judged at touch-down) the event carries the zone's `action`, and the PC runs that media button; the card is re-sent once the player has changed. Elsewhere the PC answers with a refresh, or a "Too soon" toast. |
+| Tap | Under **0.4 s** and within **12 px** of the touch-down point: `EVENT tap`. Inside a tap zone (judged at touch-down) the event carries the zone's `action`, and the PC runs that media button; the card is re-sent once the player has changed. Elsewhere the PC refreshes, unless the last fetch is under 60 s old; then nothing happens (no toast since 2026-10-29). |
 | Swipe | At least **60 px** horizontally, more horizontal than vertical: next (left) or previous (right) page, wrapping around. **0.28 s** slide, ease-out. Then `EVENT page`. |
-| Long press | Held still **0.4 s** inside a zone: a ring of radius **30 px** appears around the finger and fills clockwise over **1.5 s**. Moving or lifting cancels it. When it closes: `EVENT reset` with the zone's action. The PC resets the value and sends a toast. Outside any zone, a long press does nothing. |
+| Long press | Held still **0.4 s** inside a zone: the overlay `@hold-<action>` shows over the page (a banner the PC draws at the top, "Resetting div/h", with an empty bar), and the screen fills the bar `HOLD_BAR` (x 128, y 46, 224×6, in `theme.py`) in gold from the left over **1.5 s**. Without that overlay, only the bar shows. Moving or lifting cancels it. When the bar is full: `EVENT reset` with the zone's action. (Until 2026-10-29: a ring around the finger, which the finger hid.) The PC resets the value and sends a toast. Outside any zone, a long press does nothing. |
 | Dots | Drawn by the screen at the bottom (y = 311), or an "n/N" counter above 8 pages. |
 | Idle | After IDLE with a sprite: black, with the sprite drawn at full brightness. It starts in the middle, heading in a random diagonal direction at **100 px/s** (`IDLE_SPEED`), and bounces off the edges of its visible pixels as turned (alpha > 0), never leaving the screen. It turns to face its travel: angle = −atan2(vy, vx), counter-clockwise in degrees (upright going right, upside down going left), easing towards it with a **0.25 s** time constant (`IDLE_TURN`), to the nearest degree. Event animations (PLAY) are drawn instead while they play, then the cat again. Any touch on the cat (judged at touch-down, not during an animation) ends it, shows the pages and sends `EVENT wake` on release; the gesture does nothing else. HELLO, going offline, and deleting the sprite file all end it too. |
 | Boot | At power-on, the `boot` file plays if present, then the pages or the offline screen. A GIF plays once, looping until **3 s** if shorter and cut at **10 s**; an image shows for **4 s**. A PLAY from the PC replaces it, like any other animation. |

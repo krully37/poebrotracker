@@ -6,6 +6,8 @@ MARGIN = 12
 # The screen draws its own pagination dots in this strip at the bottom; overlays leave it empty.
 DOTS_TOP = 302
 DOTS_Y = 311
+# The reset banner's bar (x, y, w, h): the PC draws it empty, the screen fills it.
+HOLD_BAR = (128, 46, 224, 6)
 
 WHITE = "#F2F2F2"
 MUTED = "#8A8F98"

@@ -20,6 +20,7 @@ ACK_TIMEOUT = 1.0  # seconds before the PC resends a frame
 RETRIES = 4
 HEARTBEAT = 30  # the PC sends something at least this often
 OFFLINE_AFTER = 90  # the screen shows "PC disconnected" after this much silence
+HOLD_OVERLAY = "@hold-"
 
 # PC -> screen. Every one is answered by ACK with the same seq.
 HELLO = 0x01  # {"version", "time"} -> ACK carries the screen's inventory
@@ -237,9 +238,10 @@ def crc_hex(data: bytes) -> str:
 
 TOUCH_SLOP = 12  # px a finger may move and still count as still
 SWIPE_MIN = 60  # px of horizontal travel for a page change
-PRESS_DELAY = 0.4  # s of holding still before the reset ring appears
-RING_FILL = 1.5  # s for the ring to close; lifting earlier cancels
-RING_RADIUS = 30
+PRESS_DELAY = 0.4  # s of holding still before the reset banner appears
+HOLD_FILL = 1.5  # s for its bar to fill; lifting earlier cancels
+# While holding, the screen shows the overlay HOLD_OVERLAY + action ("@hold-reset_rate"), rendered by
+# the PC, and fills theme.HOLD_BAR in theme.GOLD from the left as the hold goes on.
 SLIDE_SECONDS = 0.28
 DIM_LEVEL = 0.3  # backlight while the PC is away
 EVENT_DIM = 0.4  # brightness of the page under an over-the-page event animation

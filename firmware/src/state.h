@@ -10,15 +10,12 @@
 #include <string>
 #include <vector>
 
+#include "gestures.h"
 #include "protocol.h"
 
 using Blob = std::shared_ptr<const std::vector<uint8_t>>;
 
-struct Zone {
-  int16_t x, y, w, h;
-  std::string action;
-  bool tap;  // "gesture": "tap"; otherwise a long press ("hold")
-};
+using Zone = gestures::Zone;
 
 struct Page {
   std::string id;

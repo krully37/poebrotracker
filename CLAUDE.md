@@ -7,7 +7,7 @@ A USB-wired 3.5" desk screen (Guition JC3248W535, ESP32-S3) that shows a Path of
 - `pc/`: the Python app (renderer, settings page, screen link, simulator). Setup and run commands are in `pc/README.md`.
 - `firmware/`: the screen side. Board drivers in `lib/board/`, the step 5 bench in `src/bench/`; the firmware itself is step 6. Build and flash commands are in `firmware/README.md`.
 
-Status on 2026-10-29: steps 1–5 and 6a are done. The screen is here: pins, touch and speeds are checked with the bench firmware (`docs/SCOPE.md` §9), and the firmware syncs with the real PC app and shows the current page (`docs/SCOPE.md` §8b). Next is 6b: slides, dots, touch gestures, toast. `git log` shows anything newer.
+Status on 2026-10-29: steps 1–5, 6a and 6b are done. The screen is here: pins, touch and speeds are checked with the bench firmware (`docs/SCOPE.md` §9), and the firmware syncs with the real PC app, slides between pages, and handles taps, long presses and toasts (`docs/SCOPE.md` §8b). Next is 6c: event animations, the boot animation, the idle cat and GIF backgrounds. `git log` shows anything newer.
 
 ## How to work here
 

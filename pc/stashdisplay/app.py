@@ -31,6 +31,7 @@ from .settings import Store
 log = logging.getLogger(__name__)
 
 TOASTS = {"reset_session": "Session reset", "reset_rate": "Div/h reset"}
+HOLDING = {"reset_session": "Resetting session", "reset_rate": "Resetting div/h"}  # the banner while held
 EVENT_KINDS = ("launch", "levelup", "death")
 # "boot" is the start animation: the screen plays it at power-on, the PC each time it connects.
 ANIM_KINDS = ("boot", *EVENT_KINDS)
@@ -144,7 +145,13 @@ class App:
             sprite = self.content.idle_sprite() if self.store.settings["idle"]["enabled"] else None
             if sprite:
                 content.files[protocol.IDLE_FILE] = sprite
+            content.overlays = self._hold_banners()
         return content
+
+    def _hold_banners(self) -> dict[str, bytes]:
+        # Rendered at each sync, so they follow the font once Fontin is downloaded.
+        return {protocol.HOLD_OVERLAY + action: protocol.encode_overlay(renderer.hold_banner(text))
+                for action, text in HOLDING.items()}
 
     def _screen_sync(self) -> None:
         if self.link:
@@ -170,8 +177,7 @@ class App:
             with self._data_lock:
                 last = self.last_snapshot.time if self.last_snapshot else 0
                 if now - last < self.store.settings["min_refresh_interval"]:
-                    self.toast("Too soon")
-                    return
+                    return  # too soon: nothing shows, the data is fresh anyway (owner, 2026-10-29)
                 self.refresh(now)
             self._screen_sync()
         elif kind == "reset" and event.get("action") in TOASTS:

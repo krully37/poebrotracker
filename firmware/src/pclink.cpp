@@ -117,8 +117,14 @@ void setPages(JsonArrayConst list, JsonDocument &r) {
     p.bgColor = parseColor(bg["color"] | "#000000");
     p.bgFile = bg["file"] | "";
     for (JsonObjectConst z : pg["zones"].as<JsonArrayConst>()) {
-      p.zones.push_back(Zone{z["x"] | (int16_t)0, z["y"] | (int16_t)0, z["w"] | (int16_t)0, z["h"] | (int16_t)0,
-                             z["action"] | "", strcmp(z["gesture"] | "hold", "tap") == 0});
+      Zone zone;
+      zone.x = z["x"] | 0;
+      zone.y = z["y"] | 0;
+      zone.w = z["w"] | 0;
+      zone.h = z["h"] | 0;
+      zone.action = z["action"] | "";
+      zone.tap = strcmp(z["gesture"] | "hold", "tap") == 0;
+      p.zones.push_back(zone);
     }
     pages.push_back(std::move(p));
   }
@@ -359,9 +365,9 @@ void log(const char *fmt, ...) {
   va_end(ap);
   JsonDocument doc;
   doc["text"] = text;
-  std::string s = "L:";
-  serializeJson(doc, s);
-  enqueue(new std::string(std::move(s)));
+  std::string json;
+  serializeJson(doc, json);  // replaces the string's content, so not straight into "L:"
+  enqueue(new std::string("L:" + json));
 }
 
 }  // namespace pclink

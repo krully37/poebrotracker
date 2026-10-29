@@ -39,8 +39,8 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
 
 - Landscape 480×320, rotated in software (the panel has no hardware rotation). Full-frame pushes only.
 - **Swipe left/right**: change page, with a slide animation.
-- **Tap**: ask the PC for a refresh. The PC refuses if the last fetch was under 60 s ago, and the screen shows "too soon".
-- **Long press** on a value that can be reset: a ring is drawn around the finger and fills in about 1.5 s; lifting early cancels. When it closes, that value resets. Resettable values: **session** (gain, chart) and **div/h** (the rate starts counting again from that moment). League start, today and best hour cannot be reset, so a long press there does nothing. The PC tells the screen which areas of each page are resettable.
+- **Tap**: ask the PC for a refresh. The PC ignores it if the last fetch was under 60 s ago, silently (decided 2026-10-29: the "Too soon" toast was annoying).
+- **Long press** on a value that can be reset: a banner in the tooltip style shows at the top, "Resetting div/h" or "Resetting session", with a gold bar that fills in about 1.5 s; lifting early cancels. When it is full, that value resets. (Decided 2026-10-29 on the real screen: the first design, a ring around the finger, was hidden by the finger.) Resettable values: **session** (gain, chart) and **div/h** (the rate starts counting again from that moment). League start, today and best hour cannot be reset, so a long press there does nothing. The PC tells the screen which areas of each page are resettable.
 - **Pagination dots**, drawn by the screen. They switch to a "4/9" counter when there are many pages.
 - **Start animation** ("Screen start" in settings, the `boot` file): at power-on the screen plays it from its own flash (no PC needed), then shows the pages, or the offline screen if the PC is not there yet. It follows the event rule in §5b (a GIF plays once, looping until 3 s if shorter, cut at 10 s). Decided 2026-10-28:
   - The built-in one is the owner's cat spinning: 5 turns in 4 s, made from one sharp frame of `images/spin.mp4` (the real spin is too blurred; steps in `pc/stashdisplay/assets/anims/README.md`).
@@ -190,7 +190,7 @@ Decided 2026-10-29.
 - **Landscape:** the screen stands in landscape, and the protocol stays 480×320 landscape. The firmware turns the image while compositing (panel x = 319 − landscape y, panel y = landscape x). Each 16-row panel strip reads 32-byte runs of the landscape image, one cache line each, so turning costs about nothing. Touch is mapped back the same way.
 - **Order**, one commit each:
   - **6a:** the USB link (frames, ACKs, inventory, transfers to PSRAM and flash), offline screen and dimming. **Done 2026-10-29:** the real PC app syncs with the screen (HELLO answered in 26 ms, the three animations stored in flash with their CRC checked), the current page shows in landscape, and "Waiting for the PC" / "PC disconnected" show dimmed. The flash has 13.5 MB for files.
-  - **6b:** pages: compositor, swipe slide, dots, tap, long-press ring, toast.
+  - **6b:** pages: compositor, swipe slide, dots, tap, long-press banner, toast. **Done 2026-10-29.** Each page is composited once into the panel's own order when it changes (bg + overlay, ~35 ms), so a slide only copies rows: **45 fps** (13 frames in 0.29 s), limited by the panel bus. The touch controller sometimes reports no finger while one is down, so only 60 ms without one counts as lifting it. The dots and the "4/9" counter are baked into the firmware from the PC renderer (`pc/tools/firmware_assets.py`).
   - **6c:** animations (events over the page and full screen, boot animation) and GIF backgrounds.
   - **6d:** video backgrounds; the MJPEG file format is proposed then.
   - The framing is also unit-tested on the PC (`pio test -e native`).

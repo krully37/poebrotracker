@@ -2,7 +2,7 @@ import io
 import time
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageColor
 
 from stashdisplay import pages as pagelib
 from stashdisplay.app import App
@@ -13,7 +13,7 @@ from stashdisplay.link.client import Content, FileContent, PageContent, ScreenLi
 from stashdisplay.link.simulator import SimRunner, SimScreen
 from stashdisplay.link.transport import LoopbackPair
 from stashdisplay.media import MediaStore
-from stashdisplay.render import renderer
+from stashdisplay.render import renderer, theme
 from stashdisplay.render.templates import TEMPLATES
 from stashdisplay.settings import Store
 
@@ -144,7 +144,7 @@ def test_gestures_send_events(rig):
     sim.touch_up(480, 200)  # swipe right: back to page a
     wait_for(lambda: sim.current == 0)
     sim.touch_down(50, 80)  # long press inside the zone
-    wait_for(lambda: any(e["type"] == "reset" for e in r.events), timeout=p.PRESS_DELAY + p.RING_FILL + 2)
+    wait_for(lambda: any(e["type"] == "reset" for e in r.events), timeout=p.PRESS_DELAY + p.HOLD_FILL + 2)
     sim.touch_up(50, 80)
     assert r.events[-1] == {"type": "reset", "action": "reset_rate", "page": "a"}
 
@@ -158,7 +158,7 @@ def test_tap_zone_sends_its_action_and_never_a_reset(rig):
     wait_for(lambda: r.events)
     assert r.events == [{"type": "tap", "page": "a", "action": "media_toggle"}]
     r.sim.touch_down(80, 230)  # a long press on a button: no ring, no event
-    time.sleep(p.PRESS_DELAY + p.RING_FILL + 0.2)
+    time.sleep(p.PRESS_DELAY + p.HOLD_FILL + 0.2)
     r.sim.touch_up(80, 230)
     time.sleep(0.3)
     assert len(r.events) == 1
@@ -169,13 +169,38 @@ def test_long_press_released_early_or_outside_a_zone_does_nothing(rig):
     wait_for(lambda: r.sim.pages)
     r.sim.touch_down(50, 50)
     time.sleep(p.PRESS_DELAY + 0.3)
-    assert r.sim.frame()  # the ring is drawn without errors
+    assert r.sim.frame()  # the bar is drawn without errors, even with no banner sent
     r.sim.touch_up(50, 50)
     r.sim.touch_down(300, 300)
-    time.sleep(p.PRESS_DELAY + p.RING_FILL + 0.2)
+    time.sleep(p.PRESS_DELAY + p.HOLD_FILL + 0.2)
     r.sim.touch_up(300, 300)
     time.sleep(0.3)
     assert r.events == []
+
+
+def test_holding_shows_the_banner_and_fills_its_bar(rig):
+    banner = p.encode_overlay(renderer.hold_banner("Resetting div/h"))
+    zone = {"x": 0, "y": 100, "w": 200, "h": 100, "action": "reset_rate"}
+    r = rig(Content([page("a", color="#000000", zones=[zone])], {}, {"@hold-reset_rate": banner}))
+    wait_for(lambda: r.sim.pages and "@hold-reset_rate" in r.sim.overlays)
+    x, y, w, h = theme.HOLD_BAR
+    before = r.sim.frame()
+    r.sim.touch_down(50, 150)
+    time.sleep(p.PRESS_DELAY + p.HOLD_FILL / 2)
+    held = r.sim.frame()
+    r.sim.touch_up(50, 150)
+    assert before.getpixel((240, 20)) == (0, 0, 0)
+    assert held.getpixel((240, 20)) != (0, 0, 0)  # the banner
+    assert held.getpixel((x + 2, y + h // 2)) == ImageColor.getrgb(theme.GOLD)  # filled from the left
+    assert held.getpixel((x + w - 3, y + h // 2)) != ImageColor.getrgb(theme.GOLD)  # not yet to the end
+
+
+def test_app_sends_a_banner_for_each_reset(tmp_path):
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    content = app.screen_content()
+    assert set(content.overlays) == {"@hold-reset_rate", "@hold-reset_session"}
+    actions = {z["action"] for pg in content.pages for z in pg.zones if z.get("gesture", "hold") == "hold"}
+    assert actions <= {a.removeprefix("@hold-") for a in content.overlays}
 
 
 def test_unplug_then_reconnect_resends_nothing_already_there(rig):
@@ -246,8 +271,10 @@ def test_app_tap_and_resets(tmp_path):
     assert data.metrics["rate"] is not None
     app.on_screen_event({"type": "tap", "page": "total"})
     assert toasts == []  # the demo's last point is minutes old: refresh allowed
+    refreshed = app.last_snapshot.time
     app.on_screen_event({"type": "tap", "page": "total"})
-    assert toasts == ["Too soon"]
+    assert toasts == []  # too soon: no refresh, and nothing on the screen
+    assert app.last_snapshot.time == refreshed
     app.on_screen_event({"type": "reset", "action": "reset_rate", "page": "total"})
     data, _ = app.render_data()
     assert data.metrics["rate"] is None  # counting again from now
