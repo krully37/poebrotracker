@@ -47,6 +47,7 @@ The first run downloads the game icons and the Fontin font into the local cache 
 ```bash
 .venv\Scripts\pip install pyinstaller
 .venv\Scripts\python packaging\build.py
+```
 
 This writes `dist\StashDisplay.exe`: one file, no console window, which starts the app when
 double-clicked. GitHub Actions builds the same on every push (`.github/workflows/build.yml`); a `v*`
