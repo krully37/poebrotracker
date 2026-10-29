@@ -38,6 +38,10 @@ def characters_path() -> Path:
     return app_dir() / "characters.json"
 
 
+def maps_path() -> Path:
+    return app_dir() / "maps.json"
+
+
 def log_path() -> Path:
     return app_dir() / "stashdisplay.log"
 

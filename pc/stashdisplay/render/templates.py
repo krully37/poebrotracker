@@ -38,6 +38,7 @@ def _columns(n: int, top: int, height: int, prefix: str) -> dict[str, Box]:
 
 _full_h = BOTTOM - TOP
 _half_h = (_full_h - GAP) // 2
+_tile_h = 96
 
 TEMPLATES: dict[str, Template] = {
     t.id: t
@@ -81,6 +82,15 @@ TEMPLATES: dict[str, Template] = {
             {
                 **_columns(2, TOP, _half_h, "top"),
                 **_columns(2, TOP + _half_h + GAP, _half_h, "bottom"),
+            },
+        ),
+        Template(
+            "wide4",
+            "Wide + four tiles",
+            "One wide slot over a row of four small tiles.",
+            {
+                "main": Box(MARGIN, TOP, INNER_W, _full_h - _tile_h - GAP),
+                **_columns(4, BOTTOM - _tile_h, _tile_h, "tile"),
             },
         ),
         Template(

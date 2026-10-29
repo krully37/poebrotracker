@@ -27,7 +27,7 @@ def no_data():
 
 def test_preset_pages_render(demo):
     shown = pagelib.visible(pagelib.preset())
-    assert [p["id"] for p in shown] == ["total", "top", "session"]
+    assert [p["id"] for p in shown] == ["total", "top", "session", "maps"]
     for i, page in enumerate(shown):
         img = renderer.preview(page, demo, i, len(shown))
         assert img.size == (WIDTH, HEIGHT)
@@ -126,3 +126,44 @@ def test_formatting():
     assert renderdata.fmt_duration(30) == "now"
     assert renderdata.fmt_duration(130) == "2m"
     assert renderdata.fmt_duration(2 * 3600 + 300) == "2h05"
+    assert renderdata.fmt_metric("count", 12) == "12"
+    assert renderdata.fmt_metric("per_hour", 6.43) == "6.4/h"
+    assert renderdata.fmt_metric("duration", 7 * 60 + 5) == "7:05"
+    assert renderdata.fmt_metric("duration", 3600 + 2 * 60 + 9) == "1:02:09"
+
+
+def test_map_metrics_and_div_per_map():
+    from stashdisplay.maps import MapStats
+
+    h = History(path=None)
+    h.session_start = NOW - 3600
+    h.add(NOW - 3500, 10.0)
+    h.add(NOW - 60, 16.0)
+    data = renderdata.build(h, None, now=NOW, synced_at=NOW, maps=MapStats(4, 9, 5.5, 410.0, None))
+    m = data.metrics
+    assert (m["maps_session"], m["maps_today"], m["maps_per_hour"], m["map_time_avg"]) == (4, 9, 5.5, 410.0)
+    assert m["div_per_map"] == pytest.approx(1.5)  # 6 divines gained over 4 maps
+    none = renderdata.build(h, None, now=NOW, synced_at=NOW, maps=MapStats(0, 0, None, None, None))
+    assert none.metrics["div_per_map"] is None
+    assert renderdata.build(h, None, now=NOW, synced_at=NOW).metrics.get("maps_session") is None
+
+
+def test_current_map_card_states(demo):
+    import dataclasses
+
+    from stashdisplay.maps import CurrentMap
+
+    page = pagelib.normalize_page({"template": "wide4", "slots": {"main": {"widget": "current_map"}}})
+    shots = set()
+    for cur in (None,
+                CurrentMap("City Square", "T16", 125, "running", 0, 1, []),
+                CurrentMap("City Square", "T16", 126, "running", 0, 1, []),
+                CurrentMap("City Square", "T16", 126, "paused", 0, 1, []),
+                CurrentMap("City Square", "T16", 126, "out", 2, 3, ["Bestiary", "Delirium", "Blight", "Harvest",
+                                                                    "Expedition", "Ultimatum", "Betrayal", "Maven"])):
+        shots.add(renderer.overlay(page, dataclasses.replace(demo, current_map=cur)).tobytes())
+    assert len(shots) == 5  # each one looks different: the timer ticks, the state shows
+    assert fill_placeholders("{map} {map_tier} {map_time} {maps_session}", demo) == "City Square T16 4:12 12"
+    # Holding "maps this session" resets the session, like the session gain.
+    zones = pagelib.touch_zones(pagelib.preset()[3])
+    assert [z["action"] for z in zones] == ["reset_session"]

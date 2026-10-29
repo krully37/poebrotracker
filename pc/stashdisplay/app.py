@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Callable
 
+from . import maps as mapslib
 from . import pages as pagelib
 from . import paths
 from .assets import AssetCache
@@ -23,6 +24,7 @@ from .link import protocol
 from .link.client import Content, ScreenLink
 from .link.content import ContentBuilder
 from .link.transport import Port, SerialPort, candidate_ports
+from .maps import MapTracker
 from .media import MediaStore
 from .nowplaying import ACTIONS as MEDIA_ACTIONS
 from .nowplaying import Player, create_player
@@ -46,7 +48,7 @@ SYNC_WAIT = 30.0  # seconds between syncing WealthyExile and reading it again (a
 
 class App:
     def __init__(self, store: Store, assets: AssetCache, media: MediaStore, characters: Characters | None = None,
-                 history: History | None = None):
+                 history: History | None = None, maps: MapTracker | None = None):
         self.store = store
         self.assets = assets
         self.media = media
@@ -77,13 +79,17 @@ class App:
         self._playing: tuple[str, float] | None = None  # (event kind, monotonic end)
         self.player: Player | None = None  # what the PC plays, for the media card
         self.idle: IdleWatch | None = None
+        # The maps run, from the same Client.txt lines (docs/SCOPE.md §5c).
+        self.maps = maps or MapTracker(None, self.characters)
+        self.maps.on_change = self._screen_sync  # a new map, a portal, a death, a mechanic...
 
     @classmethod
     def create(cls, offline: bool = False) -> "App":
         store = Store.load(paths.settings_path())
         assets = AssetCache(offline=offline)
-        app = cls(store, assets, MediaStore(paths.app_dir() / "media"), Characters(paths.characters_path()),
-                  History.load(paths.history_path()))
+        characters = Characters(paths.characters_path())
+        app = cls(store, assets, MediaStore(paths.app_dir() / "media"), characters,
+                  History.load(paths.history_path()), MapTracker.load(paths.maps_path(), characters))
         fonts.register_fontin(assets.fontin())
         return app
 
@@ -197,10 +203,17 @@ class App:
             history, snap = self._shown(now, force_demo)
             demo = history is self._demo_history
             s = self.store.settings
+            # Maps come from Client.txt, not the stash: real ones as soon as there is one. They
+            # count in the session shown, so a hold on the session value resets both.
+            if force_demo or (demo and not self.maps.has_maps()):
+                map_stats = mapslib.demo_stats()
+            else:
+                map_stats = self.maps.stats(history.session_start, now)
             data = renderdata.build(
                 history, snap, now=now, synced_at=snap.time,
                 item_prices=demo_prices(snap.div_price) if demo else self.prices.get(self._priced_items(), snap.league, snap.div_price),
                 spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon,
+                maps=map_stats,
             )
         return dataclasses.replace(data, media=media), demo
 
@@ -330,7 +343,8 @@ class App:
         return find_client_log(configured)
 
     def start_watcher(self) -> LogWatcher:
-        self.watcher = LogWatcher(self.client_log, self.characters, self.on_game_event).start()
+        self.watcher = LogWatcher(self.client_log, self.characters, self.on_game_event, on_line=self.maps.feed).start()
+        self.maps.start()
         return self.watcher
 
     def on_game_event(self, event: GameEvent) -> None:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .. import stats
 from ..history import History
+from ..maps import CurrentMap, MapStats
 from ..sources.base import Snapshot, Tab
 
 STALE_AFTER = 15 * 60
@@ -22,8 +23,12 @@ class ItemPrice:
 class Metric:
     id: str
     label: str
-    kind: str  # "div" (amount), "signed" (gain), "rate" (gain per hour), "chaos"
+    # "div" (amount), "signed" (gain), "rate" (gain per hour), "chaos", and for maps: "count",
+    # "per_hour" (a count per hour), "duration" (seconds)
+    kind: str
 
+
+DIV_KINDS = ("div", "signed", "rate")  # amounts in divines: shown with the divine icon
 
 METRICS: dict[str, Metric] = {
     m.id: m
@@ -35,6 +40,13 @@ METRICS: dict[str, Metric] = {
         Metric("best_hour", "Best hour today", "signed"),
         Metric("league_gain", "Since league start", "signed"),
         Metric("div_price", "Divine price", "chaos"),
+        # The map tracker (docs/SCOPE.md §5c).
+        Metric("maps_session", "Maps this session", "count"),
+        Metric("maps_today", "Maps today", "count"),
+        Metric("maps_per_hour", "Maps per hour", "per_hour"),
+        Metric("map_time_avg", "Average map time", "duration"),
+        # Session gain ÷ maps this session: one map's own earnings can't be known from stash values.
+        Metric("div_per_map", "Div per map", "signed"),
     ]
 }
 
@@ -53,6 +65,7 @@ class RenderData:
     # Item name -> local icon file (AssetCache.icon). None renders without game icons.
     icon: Callable[[str], Path | None] | None = None
     media: "NowPlaying | None" = None  # what the PC is playing, for the media card
+    current_map: CurrentMap | None = None  # the map being run (or the last one), for its card
 
     @property
     def stale(self) -> bool:
@@ -79,6 +92,7 @@ def build(
     spark_points: int = 48,
     rate_window: float = 3600,
     icon: Callable[[str], Path | None] | None = None,
+    maps: MapStats | None = None,
 ) -> RenderData:
     pts = history.points
     total = snapshot.total if snapshot else (pts[-1][1] if pts else None)
@@ -94,6 +108,15 @@ def build(
         "league_gain": total - league_start[1] if total is not None and league_start else None,
         "div_price": snapshot.div_price if snapshot else None,
     }
+    if maps is not None:
+        session_gain = metrics["session"]
+        metrics.update({
+            "maps_session": maps.session,
+            "maps_today": maps.today,
+            "maps_per_hour": maps.per_hour,
+            "map_time_avg": maps.average,
+            "div_per_map": session_gain / maps.session if maps.session and session_gain is not None else None,
+        })
     session_pts = stats.series_since(pts, history.session_start)
     return RenderData(
         now=now,
@@ -106,6 +129,7 @@ def build(
         session_start=history.session_start,
         item_prices=item_prices or {},
         icon=icon,
+        current_map=maps.current if maps else None,
     )
 
 
@@ -129,11 +153,25 @@ def fmt_metric(kind: str, v: float | None) -> str:
         return "--"
     if kind == "chaos":
         return f"{v:,.0f}c"
+    if kind == "count":
+        return f"{v:,.0f}"
+    if kind == "per_hour":
+        return f"{v:.1f}/h"
+    if kind == "duration":
+        return fmt_clock(v)
     if kind in ("signed", "rate"):
         sign = "+" if v >= 0 else "-"
         text = sign + fmt_amount(abs(v))
         return text + "/h" if kind == "rate" else text
     return fmt_amount(v)
+
+
+def fmt_clock(seconds: float) -> str:
+    """A timer: "7:05", "1:02:09"."""
+    s = max(0, int(seconds))
+    hours, rest = divmod(s, 3600)
+    minutes, s = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{s:02d}" if hours else f"{minutes}:{s:02d}"
 
 
 def fmt_duration(seconds: float) -> str:

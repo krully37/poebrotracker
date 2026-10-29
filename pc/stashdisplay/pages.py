@@ -79,8 +79,9 @@ def visible(pages: list[dict]) -> list[dict]:
 
 
 # What a long press resets, by what a slot shows. Anything else is not resettable.
+# Maps this session belong to the same session (docs/SCOPE.md §5c).
 RESETS = {("value", "session"): "reset_session", ("value", "rate"): "reset_rate",
-          ("sparkline", "session"): "reset_session"}
+          ("sparkline", "session"): "reset_session", ("value", "maps_session"): "reset_session"}
 
 
 def touch_zones(page: dict) -> list[dict]:
@@ -108,7 +109,7 @@ def touch_zones(page: dict) -> list[dict]:
 
 
 def preset() -> list[dict]:
-    """The pages a fresh install starts with: the brief's three pages."""
+    """The pages a fresh install starts with: the brief's three pages, then the maps."""
     pages = [
         {
             "id": "total", "name": "Total", "template": "hero",
@@ -135,6 +136,18 @@ def preset() -> list[dict]:
                          "sub": "chaos per divine", "align": "right"},
                 "chart": {"widget": "sparkline", "series": "session"},
                 "footer": {"widget": "text", "text": "Best hour today {best_hour}  ·  Rate {rate}", "color": "#8A8F98"},
+            },
+        },
+        {
+            # The map tracker (docs/SCOPE.md §5c).
+            "id": "maps", "name": "Maps", "template": "wide4",
+            "slots": {
+                "main": {"widget": "current_map", "title": "Current map"},
+                "tile1": {"widget": "value", "metric": "maps_session", "label": "Maps", "sub": "{maps_today} today",
+                          "align": "center"},
+                "tile2": {"widget": "value", "metric": "maps_per_hour", "label": "Per hour", "align": "center"},
+                "tile3": {"widget": "value", "metric": "map_time_avg", "label": "Average", "align": "center"},
+                "tile4": {"widget": "value", "metric": "div_per_map", "label": "Per map", "align": "center"},
             },
         },
     ]

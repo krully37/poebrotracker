@@ -19,11 +19,11 @@ from typing import Any
 from PIL import Image
 
 from . import draw
-from .data import METRICS, RenderData, fmt_amount, fmt_duration, fmt_metric
+from .data import DIV_KINDS, METRICS, RenderData, fmt_amount, fmt_clock, fmt_duration, fmt_metric
 from .draw import Ctx
 from .fonts import BUNDLED, FALLBACK, NAME_FAMILY, TITLE_FAMILY, fit, font, text_size
 from .templates import Box
-from .theme import FAINT, GOLD, LABEL, MUTED, SPARK, WHITE, signed_color
+from .theme import FAINT, FRAME_LINE, GOLD, LABEL, MUTED, SPARK, STALE, WHITE, signed_color
 
 FRAMES = ["tooltip", "plain", "none"]
 FONT_CHOICES = [*BUNDLED, *FALLBACK]
@@ -110,6 +110,12 @@ def placeholders(data: RenderData) -> dict[str, str]:
         session_since=start.strftime("%H:%M") if start else "--",
         session_duration=fmt_duration(data.now - data.session_start) if start else "--",
         synced=fmt_duration(data.now - data.synced_at) if data.synced_at else "never",
+    )
+    cur = data.current_map
+    values.update(
+        map=cur.name if cur else "--",
+        map_tier=cur.tier if cur else "--",
+        map_time=fmt_clock(cur.seconds) if cur else "--",
     )
     return values
 
@@ -270,7 +276,7 @@ def render_value(ctx: Ctx, box: Box, o: dict) -> None:
     main = fmt_metric(metric.kind, value)
     icon = None
     if o["icon"]:
-        if metric.kind != "chaos":
+        if metric.kind in DIV_KINDS:
             icon = "Divine Orb"
         elif draw.has_icon(ctx, "Chaos Orb") and value is not None:
             icon, main = "Chaos Orb", f"{value:,.0f}"  # the icon replaces the "c"
@@ -659,6 +665,81 @@ def render_media(ctx: Ctx, box: Box, o: dict) -> None:
     _media_text(ctx, text, now)
     for action, b in buttons:
         _media_button(ctx, b, action, now)
+
+
+# --- Current map: the map tracker's card (docs/SCOPE.md §5c) -------------------------------------
+
+MAP_STATES = {"paused": ("Paused", STALE), "out": ("Outside the map", MUTED)}
+
+
+def map_tags(ctx: Ctx, box: Box, tags: list[str], f) -> None:
+    """Mechanic tags as small framed labels on one row, as many as fit, then "+2" for the rest."""
+    pad = max(3, f.size // 3)
+    x, right = box.x, box.x + box.w
+    for i, tag in enumerate(tags):
+        w = text_size(tag, f)[0] + 2 * pad
+        rest = len(tags) - i - 1
+        more_w = text_size(f"+{rest}", f)[0] + pad if rest else 0
+        if x + w + more_w > right:
+            more = f"+{len(tags) - i}"
+            draw.text_in(ctx, Box(int(x), box.y, max(1, int(right - x)), box.h), more, f, MUTED, "left")
+            return
+        draw.paint(ctx, FRAME_LINE, lambda d, x=x, w=w: d.rounded_rectangle(
+            (x, box.y, x + w - 1, box.y + box.h - 1), radius=3, outline=255, width=1))
+        draw.text_in(ctx, Box(int(x + pad), box.y, int(w - 2 * pad) + 1, box.h), tag, f, LABEL, "left")
+        x += w + pad
+
+
+@widget("current_map", "Current map", "The map being run, or the last one: its name, tier, a live timer, deaths, "
+        "portals and the league mechanics met. Read from the game's log, Client.txt.", [
+    Option("title", "text", "Current map", "Title"),
+    Option("mechanics", "bool", True, "Mechanics"),
+])
+def render_current_map(ctx: Ctx, box: Box, o: dict) -> None:
+    box = list_title(ctx, box, o["title"])
+    cur = ctx.data.current_map
+    if cur is None:
+        empty(ctx, box, "No map yet")
+        return
+    timer = fmt_clock(cur.seconds)
+    if box.h < 64:
+        # A thin slot (a footer): everything on one line.
+        line = f"{cur.name}  ·  {cur.tier}  ·  {timer}"
+        f = fit(line, NAME_FAMILY, 400, box.w, int(box.h * 0.75), max_size=22)
+        draw.text_in(ctx, box, draw.truncate(line, f, box.w), f, WHITE, "left", "middle")
+        return
+    gap = 4
+    line_h = int(min(24, max(12, box.h * 0.2)))
+    small_h = int(min(16, max(10, box.h * 0.13)))
+    # Name and tier.
+    tf = font(NUMBER_FAMILY, line_h, 700)
+    tier_w = text_size(cur.tier, tf)[0]
+    draw.text_in(ctx, Box(box.x + box.w - tier_w, box.y, tier_w, line_h), cur.tier, tf, GOLD, "right")
+    nf = font(NAME_FAMILY, line_h + 1, 400)
+    name_w = box.w - tier_w - 8
+    draw.text_in(ctx, Box(box.x, box.y, name_w, line_h), draw.truncate(cur.name, nf, name_w), nf, WHITE, "left")
+    # Deaths and portals at the bottom, the tags above them when there is room.
+    sf = font(NAME_FAMILY, small_h, 400)
+    info_y = box.y + box.h - small_h
+    info = f"Deaths {cur.deaths}  ·  Portals {cur.portals}"
+    draw.text_in(ctx, Box(box.x, info_y, box.w, small_h), draw.truncate(info, sf, box.w), sf, MUTED, "left")
+    timer_top, timer_bottom = box.y + line_h + gap, info_y - gap
+    tags = cur.mechanics if o["mechanics"] else []
+    tag_h = small_h + 4
+    if tags and timer_bottom - tag_h - gap - timer_top >= line_h:
+        map_tags(ctx, Box(box.x, timer_bottom - tag_h, box.w, tag_h), tags, font(NAME_FAMILY, small_h - 1, 400))
+        timer_bottom -= tag_h + gap
+    # The live timer, with "Paused" or "Outside the map" beside it.
+    timer_box = Box(box.x, timer_top, box.w, max(1, timer_bottom - timer_top))
+    state, state_color = MAP_STATES.get(cur.state, ("", WHITE))
+    if state:
+        state_w = text_size(state, sf)[0]
+        if state_w <= box.w * 0.45:
+            draw.text_in(ctx, Box(box.x + box.w - state_w, timer_box.y, state_w, timer_box.h), state, sf, state_color, "right")
+            timer_box = Box(box.x, timer_box.y, box.w - state_w - 8, timer_box.h)
+    # Fitted on 8s, so the size does not jump as the digits change.
+    big = fit(re.sub(r"\d", "8", timer), NUMBER_FAMILY, 700, timer_box.w, timer_box.h, max_size=90)
+    draw.text_in(ctx, timer_box, timer, big, WHITE if cur.state == "running" else MUTED, "left", "middle")
 
 
 @widget("clock", "Clock", "The time, optionally with the date.", [

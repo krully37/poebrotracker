@@ -11,6 +11,7 @@ Protection against other websites open in the same browser:
 import hmac
 import io
 import logging
+import random
 import threading
 import time
 from pathlib import Path
@@ -38,8 +39,15 @@ WRITE_HEADER = "X-Stashdisplay"
 SIM_FPS = 20
 EVENT_NAMES = {"boot": "Screen start", "launch": "Game start", "levelup": "Level-up", "death": "Death"}
 SIM_CHARACTER = ("Testchar", "Witch")
+SIM_MAPS = [("MapWorldsCitySquare", "City Square"), ("MapWorldsStrand", "Strand"), ("MapWorldsDunes", "Dunes"),
+            ("MapWorldsJungleValley", "Jungle Valley"), ("MapWorldsSilo", "Silo")]
+SIM_NPCS = ["Einhar, Beastmaster: Exile! You are a welcome omen.", "Strange Voice: So pleased to see you.",
+            "Niko, Master of the Depths: Got something for you.", "Sister Cassia: I see blight!",
+            "Alva, Master Explorer: Ah, a temple!", "The Trialmaster: Will you face my trials?"]
 PLACEHOLDERS = ["total", "rate", "session", "today", "best_hour", "league_gain", "div_price",
-                "league", "time", "date", "session_since", "session_duration", "synced"]
+                "league", "time", "date", "session_since", "session_duration", "synced",
+                "maps_session", "maps_today", "maps_per_hour", "map_time_avg", "div_per_map",
+                "map", "map_tier", "map_time"]
 
 
 def schema() -> dict:
@@ -365,12 +373,25 @@ def create_app(app: App) -> Flask:
         level = (known.get(name, {}).get("level") or 1) + 1
         now = time.strftime("%Y/%m/%d %H:%M:%S")
         stamp = now + " 123456789 cffb0734 [INFO Client 4242] : "
+        npc = now + " 123456789 cffb0734 [INFO Client 4242] "
+
+        def area(area_id: str, seed: int, title: str, area_level: int = 83) -> list[str]:
+            return [now + f' 123456789 1186a886 [DEBUG Client 4242] Generating level {area_level} area "{area_id}" with seed {seed}',
+                    stamp + f"You have entered {title}."]
+
+        cur = app.maps.current
+        map_id, map_name = random.choice(SIM_MAPS)
         lines = {
             "launch": [f"{now} ***** LOG FILE OPENING *****"],
             "levelup": [stamp + f"{name} ({char_class}) is now level {min(level, 100)}"],
             "death": [stamp + f"{name} has been slain."],
             # Someone joins the party's area, then levels up: ignored.
             "party": [stamp + "Partymate has joined the area.", stamp + "Partymate (Marauder) is now level 64"],
+            "map_new": area(map_id, random.randrange(1, 2**31), map_name, random.randint(79, 83)),
+            "map_side": area("SettlersBossFallenStar", random.randrange(1, 2**31), "Starfall Crater"),
+            "map_mechanic": [npc + random.choice(SIM_NPCS)],
+            "map_hideout": area("HideoutSpace", 1, "Celestial Nebula Hideout", 60),
+            "map_portal": area(cur.area, int(cur.seed), cur.name, cur.level) if cur else None,
         }.get(kind)
         if lines is None or app.fake_log is None:
             abort(400)

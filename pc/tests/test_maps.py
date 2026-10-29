@@ -241,3 +241,21 @@ def test_watcher_feeds_every_line_to_the_tracker(tmp_path):
 def test_demo_stats_have_a_current_map():
     s = demo_stats()
     assert s.session and s.current and s.current.tier == "T16"
+
+
+def test_app_shows_real_maps_once_there_is_one_and_resets_them_with_the_session(tmp_path):
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.settings import Store
+
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    data, demo = app.render_data()
+    assert demo and data.current_map.name == "City Square"  # demo maps until the first real one
+    app.maps.feed(area("MapWorldsStrand", seed=4))
+    app.maps.feed(say(": You have entered Strand."))
+    data, demo = app.render_data()
+    assert demo and data.current_map.name == "Strand" and data.metrics["maps_session"] == 1
+    assert app.render_data(force_demo=True)[0].current_map.name == "City Square"
+    app.on_screen_event({"type": "reset", "action": "reset_session"})
+    assert app.render_data()[0].metrics["maps_session"] == 0
