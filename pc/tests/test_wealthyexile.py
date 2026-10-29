@@ -125,3 +125,32 @@ def test_app_switches_from_demo_to_wealthyexile_and_keeps_the_last_good_value(tm
     assert app.status["error"] == we.UNAVAILABLE
     data, demo = app.render_data()
     assert not demo and data.metrics["total"] == 38.6  # the last good value stays
+
+
+def test_sync_sends_what_the_sites_button_sends():
+    d = data()
+    d["user"]["lastHourlySync"] = "$D2025-01-01T21:20:33.000Z"
+    d["user"]["snapshots"] = [{"createdAt": "$D2026-10-29T18:00:00.000Z"}, {"createdAt": "$D2026-10-29T20:08:00.000Z"}]
+    html = page(d).replace("<html>", '<html><script src="/_next/static/chunks/styles-1a2b.js?dpl=x" async=""></script><script>self.__next_f.push([1,"static/chunks/app/stash/page-9z.js"])</script>')
+    action = "40" + "ab" * 20
+    script = f'let n=(0,r.createServerReference)("{action}",n.callServer,void 0,n.findSourceMapURL,"syncUser")'
+
+    class Site:
+        def __init__(self):
+            self.posted = None
+
+        def get(self, url, headers=None, **_):
+            return Reply(text=script if url.endswith("page-9z.js") else "" if url.endswith(".js") else html)
+
+        def post(self, url, data, headers, **_):
+            self.posted = (url, data, headers)
+            return Reply(text=f'0:{{"q":"?session-x={FAKE_JWT}"}}')  # the reply can carry the session
+
+    site = Site()
+    we.sync("a=b", site)
+    url, body, headers = site.posted
+    assert url == we.SYNC_URL and headers["Next-Action"] == action and headers["Cookie"] == "a=b"
+    # [threshold, newest snapshot, last hourly sync], dates in Next.js's "$D" form
+    assert json.loads(body) == [10, "$D2026-10-29T20:08:00.000Z", "$D2025-01-01T21:20:33.000Z"]
+    with pytest.raises(SourceError):
+        we.sync_action("<html></html>", site)

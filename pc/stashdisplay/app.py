@@ -39,6 +39,7 @@ EVENT_KINDS = ("launch", "levelup", "death")
 # "boot" is the start animation: the screen plays it at power-on, the PC each time it connects.
 ANIM_KINDS = ("boot", *EVENT_KINDS)
 CARD_SECONDS = 4.0  # the text stand-in for an event without a GIF
+SYNC_WAIT = 30.0  # seconds between syncing WealthyExile and reading it again (a sync took ~25 s)
 
 
 class App:
@@ -115,12 +116,24 @@ class App:
                 asked = self._fetch_now.is_set()
                 self._fetch_now.clear()
                 if self._can_fetch() and (asked or time.time() - self.last_fetch >= self.store.settings["interval"]):
+                    if asked and self.store.settings["source"] == "wealthyexile" and self.sync_wealthyexile():
+                        time.sleep(SYNC_WAIT)  # WealthyExile reads the stash from GGG meanwhile
                     if self.fetch(time.time()):
                         self._screen_sync()
 
         self._fetcher = threading.Thread(target=run, daemon=True, name="wealthyexile")
         self._fetcher.start()
         return self._fetcher
+
+    def sync_wealthyexile(self) -> bool:
+        """What WealthyExile's "Sync stash" button does: only on a tap, never on its own
+        (docs/SCOPE.md §6). False when it failed; the read that follows still happens."""
+        try:
+            wealthyexile.sync(self.store.cookie)
+        except SourceError as e:
+            log.info("WealthyExile sync: %s", e.short)  # never the reply: it can carry the session
+            return False
+        return True
 
     def _can_fetch(self) -> bool:
         return self.store.settings["source"] == "poe-pricer" or bool(self.store.cookie)
@@ -337,7 +350,7 @@ class App:
         more demo point, timed now."""
         if self._can_fetch() and self._fetcher is not None:
             self.last_fetch = now
-            self._fetch_now.set()  # syncing WealthyExile first comes once its sync call is known
+            self._fetch_now.set()  # the fetcher syncs WealthyExile first, then reads
             return
         self._demo_tick(now)
         src = self._demo_source
