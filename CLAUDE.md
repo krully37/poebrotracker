@@ -7,7 +7,7 @@ A USB-wired 3.5" desk screen (Guition JC3248W535, ESP32-S3) that shows a Path of
 - `pc/`: the Python app (renderer, settings page, screen link, simulator). Setup and run commands are in `pc/README.md`.
 - `firmware/`: the screen side. Board drivers in `lib/board/`, the step 5 bench in `src/bench/`; the firmware itself is step 6. Build and flash commands are in `firmware/README.md`.
 
-Status on 2026-10-29: steps 1–6 are done. The screen is here: pins, touch and speeds are checked with the bench firmware (`docs/SCOPE.md` §9), and the firmware syncs with the real PC app, slides between pages, handles taps, long presses and toasts, and plays the event and boot animations, the idle cat, GIF and video backgrounds (`docs/SCOPE.md` §8b). Next is step 7, WealthyExile, with the friend logged in. `git log` shows anything newer.
+Status on 2026-10-29: steps 1–7 are done. The screen syncs with the PC app and shows the real stash from WealthyExile (or PoE Pricer), with animations, the idle cat and moving backgrounds (`docs/SCOPE.md` §6, §8b and §9). Next is step 8: the Windows .exe, auto-start and the install guide. `git log` shows anything newer.
 
 ## How to work here
 
