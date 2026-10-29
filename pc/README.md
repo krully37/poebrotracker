@@ -42,6 +42,17 @@ The page is only reachable from this PC. It needs the per-install token, which t
 
 The first run downloads the game icons and the Fontin font into the local cache (add `--offline` to skip this and use fallbacks). This writes, for each page, `pageN-<id>.png` (exactly what the screen will show), `pageN-<id>-overlay.png` (the transparent layer sent to the screen), and `all-pages.png` with every page side by side.
 
+## Windows app (.exe)
+
+```bash
+.venv\Scripts\pip install pyinstaller
+.venv\Scripts\python packaginguild.py
+```
+
+This writes `dist\StashDisplay.exe`: one file, no console window, which starts the app when
+double-clicked. GitHub Actions builds the same on every push (`.github/workflows/build.yml`); a `v*`
+tag attaches it to a release. The friend's guide is [docs/INSTALL.md](../docs/INSTALL.md).
+
 ## Tests
 
 ```bash
