@@ -34,6 +34,7 @@ from .sources.base import Snapshot, SourceError, rescaled
 log = logging.getLogger(__name__)
 
 TOASTS = {"reset_session": "Session reset", "reset_rate": "Div/h reset"}
+SYNCING = "Syncing WealthyExile..."  # the toast for a tap that syncs
 HOLDING = {"reset_session": "Resetting session", "reset_rate": "Resetting div/h"}  # the banner while held
 EVENT_KINDS = ("launch", "levelup", "death")
 # "boot" is the start animation: the screen plays it at power-on, the PC each time it connects.
@@ -133,6 +134,7 @@ class App:
         except SourceError as e:
             log.info("WealthyExile sync: %s", e.short)  # never the reply: it can carry the session
             return False
+        log.info("WealthyExile sync sent")
         return True
 
     def _can_fetch(self) -> bool:
@@ -168,6 +170,7 @@ class App:
             self.live = True
         self.status["error"] = None
         self.status["last_sync"] = snap.time
+        log.info("stash read: synced at %s", time.strftime("%H:%M:%S", time.localtime(snap.time)))
         return True
 
     def render_data(self, force_demo: bool = False) -> tuple[renderdata.RenderData, bool]:
@@ -262,6 +265,8 @@ class App:
                 if now - last < self.store.settings["min_refresh_interval"]:
                     return  # too soon: nothing shows, the data is fresh anyway (owner, 2026-10-29)
                 self.refresh(now)
+            if self.live and self.store.settings["source"] == "wealthyexile":
+                self.toast(SYNCING)  # the new values take ~30 s: say something has started
             self._screen_sync()
         elif kind == "reset" and event.get("action") in TOASTS:
             with self._data_lock:
