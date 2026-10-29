@@ -28,8 +28,8 @@ from .nowplaying import Player, create_player
 from .render import data as renderdata
 from .render import fonts, renderer, theme
 from .settings import Store
-from .sources import wealthyexile
-from .sources.base import Snapshot, SourceError
+from .sources import poepricer, wealthyexile
+from .sources.base import Snapshot, SourceError, rescaled
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class App:
                 self._fetch_now.wait(5)
                 asked = self._fetch_now.is_set()
                 self._fetch_now.clear()
-                if self.store.cookie and (asked or time.time() - self.last_fetch >= self.store.settings["interval"]):
+                if self._can_fetch() and (asked or time.time() - self.last_fetch >= self.store.settings["interval"]):
                     if self.fetch(time.time()):
                         self._screen_sync()
 
@@ -122,13 +122,29 @@ class App:
         self._fetcher.start()
         return self._fetcher
 
+    def _can_fetch(self) -> bool:
+        return self.store.settings["source"] == "poe-pricer" or bool(self.store.cookie)
+
+    def _league(self) -> str:
+        """The league to ask PoE Pricer about: WealthyExile's once known, else poe.ninja's current one."""
+        return (self.last_snapshot.league if self.last_snapshot else "") or self.assets.league()
+
     def fetch(self, now: float) -> bool:
-        """Read WealthyExile once. A failure keeps the last good values and says why in the status."""
+        """Read the stash once, from the chosen source. A failure keeps the last good values and
+        says why in the status."""
         self.last_fetch = now
+        url = self.store.settings["poepricer"]["url"]
         try:
-            snap = wealthyexile.fetch(self.store.cookie, now)
+            if self.store.settings["source"] == "poe-pricer":
+                snap = poepricer.fetch(self._league(), url, now=now)
+            else:
+                snap = wealthyexile.fetch(self.store.cookie, now)
+                # PoE Pricer, when it answers, is the first source for the divine price.
+                rate = poepricer.divine_price(snap.league, url) if poepricer.running(url) else None
+                if rate and snap.div_price:
+                    snap = rescaled(snap, snap.div_price / rate, rate)
         except SourceError as e:
-            log.info("WealthyExile: %s", e.short)  # never the reply itself: it can carry the session
+            log.info("stash source: %s", e.short)  # never WealthyExile's reply: it can carry the session
             self.status["error"] = e.short
             return False
         with self._data_lock:
@@ -318,7 +334,7 @@ class App:
     def refresh(self, now: float) -> None:
         """Fetch new data now: WealthyExile when a cookie is saved (in the background), else one
         more demo point, timed now."""
-        if self.store.cookie and self._fetcher is not None:
+        if self._can_fetch() and self._fetcher is not None:
             self.last_fetch = now
             self._fetch_now.set()  # syncing WealthyExile first comes once its sync call is known
             return

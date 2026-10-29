@@ -27,6 +27,8 @@ from ..render.templates import HEADER_BOX, TEMPLATES
 from ..render.theme import HEIGHT, WIDTH
 from ..render.widgets import FRAMES, WIDGETS
 from ..settings import LANGUAGES
+from ..sources import poepricer, wealthyexile
+from ..sources.base import AuthError, SourceError
 
 log = logging.getLogger(__name__)
 
@@ -165,12 +167,28 @@ def create_app(app: App) -> Flask:
         body = request.get_json(force=True) or {}
         store.cookie = str(body.get("cookie", "")).strip()
         store.save()
+        if store.cookie:
+            app.refresh(time.time())  # read WealthyExile with it now
         return jsonify({"has_cookie": bool(store.cookie)})
 
     @web.post("/api/cookie/test")
     def test_cookie():
-        # The WealthyExile adapter comes with the reverse-engineering step.
-        return jsonify({"ok": False, "code": "not_implemented"})
+        """One read of WealthyExile with the saved cookie. Only the outcome comes back."""
+        try:
+            snap = wealthyexile.fetch(store.cookie)
+        except AuthError:
+            return jsonify({"ok": False, "code": "fail"})
+        except SourceError as e:
+            return jsonify({"ok": False, "code": "changed" if e.short == wealthyexile.CHANGED else "unavailable"})
+        return jsonify({"ok": True, "league": snap.league, "total": round(snap.total, 1)})
+
+    @web.post("/api/poepricer/test")
+    def test_poepricer():
+        url = str((request.get_json(force=True) or {}).get("url") or store.settings["poepricer"]["url"])
+        if not poepricer.running(url):
+            return jsonify({"ok": False})
+        league = app._league()
+        return jsonify({"ok": True, "league": league, "divine": poepricer.divine_price(league, url)})
 
     # --- Items and icons -----------------------------------------------------------
 

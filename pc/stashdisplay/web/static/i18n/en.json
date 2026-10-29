@@ -14,7 +14,6 @@
   "saved": "Saved and sent to the screen.",
   "saved.port": "Saved. The new settings-page port applies after restarting the app.",
   "save.error": "Could not save. Is the app still running?",
-
   "pages.title": "Pages",
   "pages.show": "Show on the screen",
   "pages.hide": "Hide from the screen",
@@ -32,7 +31,6 @@
   "pages.export_all": "Export all",
   "pages.reset": "Reset",
   "pages.reset.confirm": "Replace all pages with the original ones? (You can still undo before saving.)",
-
   "preview.hint": "Click a slot to edit it, or the top bar for the page settings. This is exactly what the screen will show.",
   "page.settings": "Page",
   "page.name": "Name",
@@ -42,7 +40,6 @@
   "page.header.title": "Title",
   "page.header.clock": "Clock",
   "page.header.synced": "Sync status",
-
   "bg.title": "Background",
   "bg.kind": "Type",
   "bg.color": "Color",
@@ -63,7 +60,6 @@
   "bg.delete.confirm": "Delete \"{name}\"?",
   "bg.delete.in_use": "Still used by: {pages}",
   "bg.hint": "GIFs and videos show their first frame here; they will play on the screen.",
-
   "slot.none": "Nothing selected",
   "slot.pick": "Click a slot on the preview to choose what it shows.",
   "slot.widget": "Shows",
@@ -76,7 +72,6 @@
   "items.add": "Type an item name, then Enter",
   "help.placeholders": "Placeholders",
   "help.placeholders.text": "Text fields can include these; they are replaced by live values.",
-
   "slotname.main": "Main",
   "slotname.side": "Side",
   "slotname.chart": "Chart",
@@ -89,10 +84,8 @@
   "slotname.bottom1": "Bottom left",
   "slotname.bottom2": "Bottom middle",
   "slotname.bottom3": "Bottom right",
-
   "opt.size": "Size (0 = fit the slot)",
   "opt.sparkline.color": "Line color",
-
   "we.hint": "Stash values come from WealthyExile, using your logged-in session.",
   "we.cookie.paste": "Paste the Cookie header here",
   "we.cookie.saved": "A cookie is saved (hidden)",
@@ -102,9 +95,8 @@
   "we.cookie.clear.confirm": "Remove the saved cookie?",
   "we.cookie.stored": "Cookie saved (encrypted on Windows).",
   "we.cookie.note": "The cookie stays on this PC. It is never sent to the screen or anywhere else than WealthyExile.",
-  "we.test.ok": "Connected to WealthyExile.",
+  "we.test.ok": "Connected to WealthyExile: {total} divines in {league}.",
   "we.test.fail": "WealthyExile refused the cookie. Log in again and paste a fresh one.",
-  "we.test.not_implemented": "The WealthyExile connection is not built yet: the cookie is saved and will be used once it is.",
   "we.howto.title": "How to get your cookie",
   "we.howto.1": "Open wealthyexile.com in Chrome, Edge or Firefox, and log in.",
   "we.howto.2": "Press F12 to open the developer tools, then click the Network tab.",
@@ -113,7 +105,6 @@
   "we.howto.5": "Under Request Headers, find the line called Cookie. Right-click it and choose Copy value.",
   "we.howto.6": "Paste it in the box below, click Save cookie, then Test.",
   "we.howto.warning": "The cookie works like a password for your WealthyExile account: never share it. If WealthyExile logs you out, do this again to paste a fresh one.",
-
   "set.data": "Data",
   "set.interval": "Fetch every (seconds)",
   "set.min_refresh": "Tap refresh at most every (seconds)",
@@ -135,7 +126,6 @@
   "screen.syncing": "Sending to the screen…",
   "screen.searching": "Screen not found",
   "screen.off": "Screen link off",
-
   "ev.title": "Game events",
   "ev.hint": "The screen plays a full-screen animation when it starts, when the game starts, and on your characters' level-ups and deaths. The app only reads the game's log file, Client.txt.",
   "ev.log": "Client.txt",
@@ -157,5 +147,12 @@
   "idle.title": "Idle screen",
   "idle.hint": "When the PC has not been used for a while (no keyboard or mouse, and no music or video playing), the screen shows the cat bouncing around. Touch the screen to see the pages for a minute.",
   "idle.enabled": "Show the cat when the PC is idle",
-  "idle.minutes": "After (minutes without use)"
+  "idle.minutes": "After (minutes without use)",
+  "we.test.unavailable": "WealthyExile did not answer as expected (down, or a Cloudflare check). Try again in a few minutes.",
+  "we.test.changed": "WealthyExile answered, but its page has changed: the app needs an update to read it.",
+  "set.source": "Stash from",
+  "set.poepricer": "PoE Pricer address",
+  "set.poepricer.hint": "PoE Pricer gives the divine price whenever it answers, and can give the stash instead of WealthyExile.",
+  "pp.test.ok": "PoE Pricer answers: 1 divine = {divine} chaos in {league}.",
+  "pp.test.fail": "No PoE Pricer at this address."
 }
