@@ -10,6 +10,7 @@
 #include "decor_sprites.h"
 #include "display.h"
 #include "gestures.h"
+#include "idlecat.h"
 #include "pclink.h"
 #include "state.h"
 #include "storage.h"
@@ -39,7 +40,7 @@ constexpr uint16_t kGold = compositor::rgb565(kGoldR, kGoldG, kGoldB);
 // one counts as lifting it.
 constexpr uint32_t kLiftMs = 60;
 
-enum class Mode { None, Waiting, Disconnected, Page, Animation };
+enum class Mode { None, Waiting, Disconnected, Page, Animation, Idle };
 
 // A page made ready to draw: background decoded, then composited with its overlay into panel
 // order (compositor::flatten). Three of them: the current page and its two neighbours, so a
@@ -69,6 +70,9 @@ std::string toastId;
 bool playing = false;
 Play play;
 uint32_t playStarted = ~0u;  // play.startMs of the animation on screen
+std::string idleSprite;
+uint32_t idleSerial = 0, idleStarted = ~0u, idleFrameMs = 0;
+bool waking = false;  // a finger came down on the idle cat
 
 Mode shown = Mode::None;
 bool dirty = true;
@@ -268,6 +272,43 @@ void preloadSoon(uint32_t now) {
 
 // --- Frame ---------------------------------------------------------------------------------
 
+void stopIdle(const char *why) {
+  State::Lock l;
+  state.idleSprite.clear();
+  ++state.version;
+  if (why) pclink::log("idle cat: %s", why);
+}
+
+// The idle cat bouncing on black. Any touch brings the pages back, then EVENT wake on release.
+void showIdle(uint32_t now) {
+  if (idleSerial != idleStarted) {
+    idleStarted = idleSerial;
+    if (!idlecat::start(idleSprite)) return stopIdle("cannot load the sprite");
+    idleFrameMs = now - idlecat::kFrameMs;
+  }
+  touch::Point p = touch::read();
+  if (p.down) {
+    waking = true;
+    lastTouchMs = now;
+  } else if (waking && now - lastTouchMs >= kLiftMs) {
+    waking = false;
+    stopIdle(nullptr);
+    sendEvent("wake", "");
+    return;
+  }
+  shown = Mode::Idle;
+  if (now - idleFrameMs < idlecat::kFrameMs) return;
+  idleFrameMs = now;
+  idlecat::step(now);
+  Sprite cat = idlecat::sprite();
+  Scene scene;
+  scene.page = offlineBg;  // black, in either order
+  scene.sprites = &cat;
+  scene.spriteCount = 1;
+  compositor::push(scene);
+  display::backlight(kFull);
+}
+
 // The overlay with this id unpacked into topRaw, or nullptr.
 const uint8_t *topOverlay(const std::string &id) {
   auto it = id.empty() ? overlays.end() : overlays.find(id);
@@ -394,6 +435,10 @@ void tick() {
       state.playing = false;
       ++state.version;
     }
+    if (!state.idleSprite.empty() && !state.online(now)) {
+      state.idleSprite.clear();  // the PC went away: the offline screen, as always
+      ++state.version;
+    }
     online = state.online(now);
     everHeard = state.everHeard;
     if (state.version != seenVersion) {
@@ -404,6 +449,8 @@ void tick() {
       toastId = state.toast;
       playing = state.playing;
       play = state.play;
+      idleSprite = state.idleSprite;
+      idleSerial = state.idleSerial;
       if (slide.from >= pages.size()) slide.on = false;
       dirty = true;
     }
@@ -418,6 +465,15 @@ void tick() {
   if (shown == Mode::Animation) {
     shown = Mode::None;  // the animation ended: draw what is underneath again
     playStarted = ~0u;
+  }
+  if (online && !idleSprite.empty()) {
+    showIdle(now);
+    return;
+  }
+  if (shown == Mode::Idle) {
+    shown = Mode::None;
+    idleStarted = ~0u;
+    tracker = gestures::Tracker();
   }
   Mode mode = online && !pages.empty() ? Mode::Page : everHeard ? Mode::Disconnected : Mode::Waiting;
   if (mode != Mode::Page) {

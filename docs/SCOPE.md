@@ -197,6 +197,7 @@ Decided 2026-10-29.
     - A frame that is late shows as soon as it is ready: an animation may play a little slower, never skipping.
     - The idle cat moves at 30 fps, turned with bilinear filtering.
     - **6c-1 done 2026-10-29:** level-up (full screen, twice), death (over the dimmed page) and the boot cat (at power-on, from flash) checked on the screen. The death cat is now centred.
+    - **6c-2 done 2026-10-29:** the idle cat bounces and turns on the screen, and a touch brings the pages back (EVENT wake). The turns are not perfectly smooth yet (whole degrees, the sprite turned again for each one); good enough for now (owner).
   - **6d:** video backgrounds; the MJPEG file format is proposed then.
   - The framing is also unit-tested on the PC (`pio test -e native`).
 - **Flash:** one 3 MB app partition, no over-the-air updates (the owner flashes by USB); LittleFS gets the rest, about 12.9 MB.

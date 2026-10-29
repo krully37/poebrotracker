@@ -23,6 +23,9 @@ constexpr uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) { return ((r >> 3) <<
 uint8_t *allocOverlay();
 // Unpacks an overlay into raw (from allocOverlay). False when it is not a 480×320 overlay.
 bool inflate(const uint8_t *z, size_t len, uint8_t *raw);
+// Unpacks a sprite (the overlay format at any even size, like the idle cat) into `out`, header
+// included. False when it is not one.
+bool inflateSprite(const uint8_t *z, size_t len, std::vector<uint8_t> &out);
 // A JPEG into a landscape RGB565 buffer. False when it cannot be decoded.
 bool decodeJpeg(const std::vector<uint8_t> &data, uint16_t *bg);
 void fill(uint16_t *bg, uint16_t color);

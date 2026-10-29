@@ -210,6 +210,7 @@ void end(uint16_t id, JsonDocument &r) {
     r["ok"] = true;
     r["flash_free"] = storage::freeBytes();
     State::Lock l;
+    if (state.idleSprite == x.id) ++state.idleSerial;  // a new cat under the same id
     ++state.version;  // a background may have arrived
     return;
   }
@@ -232,9 +233,13 @@ void apply(const proto::Frame &f, JsonDocument &r) {
   JsonDocument msg;
   if (!f.payload.empty() && deserializeJson(msg, f.payload.data(), f.payload.size())) return error(r, "bad json");
   switch (f.type) {
-    case proto::kHello:
+    case proto::kHello: {
       xfers.clear();  // half-finished transfers are dropped (their temp files with them)
+      State::Lock l;
+      state.idleSprite.clear();  // a new connection starts on the pages
+      ++state.version;
       return inventory(r);
+    }
     case proto::kPing:
       r["ok"] = true;
       return;
@@ -250,7 +255,21 @@ void apply(const proto::Frame &f, JsonDocument &r) {
       r["ok"] = true;
       r["flash_free"] = storage::freeBytes();
       State::Lock l;
+      if (state.idleSprite == id) state.idleSprite.clear();
       ++state.version;
+      return;
+    }
+    case proto::kIdle: {
+      std::string id = msg["sprite"] | "";
+      storage::FileInfo f;
+      if (!id.empty() && (!storage::info(id, f) || f.format != "sprite")) return error(r, "no_file");
+      State::Lock l;
+      if (state.idleSprite != id) {  // the same sprite again: it carries on from where it is
+        state.idleSprite = id;
+        ++state.idleSerial;
+      }
+      ++state.version;
+      r["ok"] = true;
       return;
     }
     case proto::kPlay: {

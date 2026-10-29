@@ -164,6 +164,23 @@ bool inflate(const uint8_t *z, size_t len, uint8_t *raw) {
          (raw[3] | raw[4] << 8) == kLandscapeW && (raw[5] | raw[6] << 8) == kLandscapeH;
 }
 
+bool inflateSprite(const uint8_t *z, size_t len, std::vector<uint8_t> &out) {
+  constexpr int kFlags = TINFL_FLAG_PARSE_ZLIB_HEADER | TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF;
+  uint8_t head[7];
+  size_t in = len, got = sizeof(head);
+  tinfl_init(&inflator);
+  tinfl_status st = tinfl_decompress(&inflator, z, &in, head, head, &got, kFlags | TINFL_FLAG_HAS_MORE_INPUT);
+  if (st < TINFL_STATUS_DONE || got != sizeof(head) || memcmp(head, "OV1", 3) != 0) return false;
+  size_t w = head[3] | head[4] << 8, h = head[5] | head[6] << 8;
+  if (!w || !h || (w & 1) || w * h > kPixels) return false;
+  out.resize(7 + w * h / 2 + w * h * 2);
+  tinfl_init(&inflator);
+  in = len;
+  got = out.size();
+  st = tinfl_decompress(&inflator, z, &in, out.data(), out.data(), &got, kFlags);
+  return st == TINFL_STATUS_DONE && got == out.size();
+}
+
 bool decodeJpeg(const std::vector<uint8_t> &data, uint16_t *bg) {
   if (!jpeg.openRAM(const_cast<uint8_t *>(data.data()), data.size(), jpegDraw)) return false;
   jpeg.setPixelType(RGB565_LITTLE_ENDIAN);

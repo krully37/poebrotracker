@@ -28,6 +28,7 @@ constexpr uint8_t kDelete = 0x06;
 constexpr uint8_t kPlay = 0x07;
 constexpr uint8_t kPing = 0x08;
 constexpr uint8_t kEventAck = 0x09;
+constexpr uint8_t kIdle = 0x0A;
 // Screen -> PC
 constexpr uint8_t kAck = 0x81;
 constexpr uint8_t kEvent = 0x82;

@@ -49,6 +49,10 @@ struct State {
   uint32_t toastUntilMs = 0;
   bool playing = false;
   Play play;
+  // The idle cat: the sprite file bouncing instead of the pages, or empty. idleSerial changes each
+  // time the cat has to start over (a new sprite, or a new file under the same id).
+  std::string idleSprite;
+  uint32_t idleSerial = 0;
 
   bool everHeard = false;
   uint32_t lastRxMs = 0;
