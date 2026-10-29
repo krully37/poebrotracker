@@ -182,7 +182,7 @@ Decided 2026-10-27.
 - `Client.txt` line formats: **checked on 2026-10-27 against a real English-client log** (the owner's, Steam install, March to August 2026, 166k lines). All 333 level-up lines and every "has been slain." system line match; chat lines with "died" or "slain" are ignored. Party members' level-ups and deaths **do** appear there; all of the ~20 other players in that log were also seen joining or leaving the area, so none was learned as an own character (zero false animations). Non-Latin names (Chinese, Korean, Cyrillic) parse fine. The friend's client is in English too (confirmed 2026-10-27), so no other language is needed.
 - Windows checks on 2026-10-27 (no screen): tests pass on Python 3.13; `Client.txt` was found through Steam's registry key and `libraryfolders.vdf` on another drive; the simulator and the fake log events work; the DPAPI vault round-trips. Real USB is still untested.
 - Real frame rate for slides, GIF and video (measured as soon as the hardware arrives).
-- USB on the board: native USB or CH340 (matters for the Windows driver and for how fast data can be sent).
+- USB on the board: **settled 2026-10-29, native USB.** The USB-C port goes straight to the ESP32-S3's USB-Serial/JTAG (`VID_303A&PID_1001`, no CH340). Windows 11 loads its built-in USB serial driver on its own (COM port plus a "USB JTAG/serial debug unit"), so the friend installs no driver. Transfer speed is still to be measured in step 5.
 - XP/hour: register an app with GGG's developer program (see §6), and whether that registration is approved.
 
 ## 10. Build order
