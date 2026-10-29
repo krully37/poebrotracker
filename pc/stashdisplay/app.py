@@ -44,6 +44,7 @@ EVENT_KINDS = ("launch", "levelup", "death")
 ANIM_KINDS = ("boot", *EVENT_KINDS)
 CARD_SECONDS = 4.0  # the text stand-in for an event without a GIF
 SYNC_WAIT = 30.0  # seconds between syncing WealthyExile and reading it again (a sync took ~25 s)
+MAP_SYNC_EVERY = 300.0  # back from a map, WealthyExile is synced at most this often (docs/SCOPE.md §5c)
 
 
 class App:
@@ -65,6 +66,8 @@ class App:
         self.history = history or History()  # in memory unless given (App.create loads the saved one)
         self.last_snapshot = None
         self.last_fetch = 0.0  # when WealthyExile was last read (a tap reads again, at most every minute)
+        self.last_we_sync = 0.0  # when WealthyExile was last synced (a tap, or after a map)
+        self._map_sync_pending = False  # back from a map: sync when 5 minutes have passed since the last one
         self._fetch_now = threading.Event()
         self._fetcher: threading.Thread | None = None
         self.prices = ninja.Prices(assets, store.settings["poeninja"]["interval"])
@@ -82,6 +85,7 @@ class App:
         # The maps run, from the same Client.txt lines (docs/SCOPE.md §5c).
         self.maps = maps or MapTracker(None, self.characters)
         self.maps.on_change = self._screen_sync  # a new map, a portal, a death, a mechanic...
+        self.maps.on_back = self._back_from_map
 
     @classmethod
     def create(cls, offline: bool = False) -> "App":
@@ -124,22 +128,47 @@ class App:
                 self._fetch_now.wait(5)
                 asked = self._fetch_now.is_set()
                 self._fetch_now.clear()
-                if self._can_fetch() and (asked or time.time() - self.last_fetch >= self.store.settings["interval"]):
-                    if asked and self.store.settings["source"] == "wealthyexile" and self.sync_wealthyexile():
-                        time.sleep(SYNC_WAIT)  # WealthyExile reads the stash from GGG meanwhile
-                    fetched = self.fetch(time.time())
-                    if self.store.settings["poeninja"]["enabled"] and self.live:
-                        self.prices.refresh(self._priced_items(), self._league())  # only when 30 min old
-                    if fetched:
-                        self._screen_sync()
+                self._fetch_turn(asked, time.time())
 
         self._fetcher = threading.Thread(target=run, daemon=True, name="wealthyexile")
         self._fetcher.start()
         return self._fetcher
 
+    def _fetch_turn(self, asked: bool, now: float) -> None:
+        """One turn of the fetcher (every 5 s): sync WealthyExile first when a tap asked for it or
+        a map is over, then read the stash; otherwise read it every `interval` seconds."""
+        s = self.store.settings
+        after_map = self._map_sync_due(now)
+        if not self._can_fetch() or not (asked or after_map or now - self.last_fetch >= s["interval"]):
+            return
+        waited = 0.0
+        if (asked or after_map) and s["source"] == "wealthyexile":
+            self.last_we_sync, self._map_sync_pending = now, False  # this sync covers the map too
+            if self.sync_wealthyexile():
+                time.sleep(SYNC_WAIT)  # WealthyExile reads the stash from GGG meanwhile
+                waited = SYNC_WAIT
+        fetched = self.fetch(now + waited)
+        if s["poeninja"]["enabled"] and self.live:
+            self.prices.refresh(self._priced_items(), self._league())  # only when 30 min old
+        if fetched:
+            self._screen_sync()
+
+    def _back_from_map(self) -> None:
+        """Back in the hideout (or a town) after a map: sync WealthyExile so div per map stays
+        current without a tap (docs/SCOPE.md §5c). The fetcher does it within 5 s, or once 5
+        minutes have passed since the last sync."""
+        if self.store.settings["maps"]["sync_after_map"]:
+            self._map_sync_pending = True
+
+    def _map_sync_due(self, now: float) -> bool:
+        s = self.store.settings
+        return (self._map_sync_pending and s["maps"]["sync_after_map"] and s["source"] == "wealthyexile"
+                and bool(self.store.cookie) and now - self.last_we_sync >= MAP_SYNC_EVERY)
+
     def sync_wealthyexile(self) -> bool:
-        """What WealthyExile's "Sync stash" button does: only on a tap, never on its own
-        (docs/SCOPE.md §6). False when it failed; the read that follows still happens."""
+        """What WealthyExile's "Sync stash" button does: on a tap, and back from a map at most
+        every 5 minutes (docs/SCOPE.md §6, §5c). False when it failed; the read that follows
+        still happens."""
         try:
             wealthyexile.sync(self.store.cookie)
         except SourceError as e:

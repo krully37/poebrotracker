@@ -44,6 +44,9 @@ DEFAULTS: dict = {
     # The idle cat: after this many minutes without keyboard or mouse input (and no media
     # playing), the screen shows the cat bouncing around instead of the pages.
     "idle": {"enabled": True, "minutes": 10},
+    # The map tracker (docs/SCOPE.md §5c): back in the hideout after a map, sync WealthyExile
+    # (at most every 5 minutes) so div per map stays current without a tap.
+    "maps": {"sync_after_map": True},
     "web": {"port": 47821},
 }
 

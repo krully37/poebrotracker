@@ -304,3 +304,60 @@ def test_the_timer_ticks_on_the_screen_by_resending_the_page_shown(tmp_path):
     finally:
         app.link.stop()
         runner.close()
+
+
+def test_wealthyexile_sync_after_a_map_never_more_than_once_in_5_minutes(tmp_path, monkeypatch):
+    from stashdisplay import app as applib
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.settings import Store
+    from stashdisplay.sources import poepricer, wealthyexile
+    from stashdisplay.sources.base import Snapshot
+
+    syncs = []
+    monkeypatch.setattr(wealthyexile, "sync", lambda cookie: syncs.append(now[0]))
+    monkeypatch.setattr(wealthyexile, "fetch", lambda cookie, t: Snapshot(total=40.0, time=t, league="L", div_price=300.0))
+    monkeypatch.setattr(poepricer, "running", lambda url: False)
+    monkeypatch.setattr(applib, "SYNC_WAIT", 0.0)
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"),
+              maps=MapTracker(None, Characters(None), idle_seconds=lambda: 0))
+    app.store.cookie = "a=b"
+    app.store.settings["poeninja"]["enabled"] = False
+    now = [10_000.0]
+
+    def one_map(seed: int) -> None:
+        app.maps.feed(area("MapWorldsCitySquare", seed=seed))
+        app.maps.feed(area("HideoutSpace", level=60))
+
+    def run_until(t: float) -> None:
+        while now[0] < t:  # the fetcher's turn, every 5 s
+            now[0] += 5
+            app._fetch_turn(False, now[0])
+
+    one_map(1)
+    run_until(10_005)
+    assert syncs == [10_005]  # straight after the map
+    one_map(2)  # a quick map: the sync waits for 5 minutes since the last one
+    run_until(10_200)
+    one_map(3)
+    run_until(10_900)
+    assert syncs == [10_005, 10_305]  # one sync for maps 2 and 3, nothing more without a new map
+    one_map(4)
+    app.maps.feed(area("HideoutSpace", level=60))  # hideout to hideout: not after a map
+    run_until(11_000)
+    assert syncs == [10_005, 10_305, 10_905]
+    assert all(b - a >= applib.MAP_SYNC_EVERY for a, b in zip(syncs, syncs[1:]))
+    # A tap syncs too, and counts: the map's sync then waits 5 minutes after it.
+    now[0] = 11_300.0
+    app._fetch_turn(True, now[0])
+    one_map(5)
+    run_until(11_595)
+    assert syncs[-1] == 11_300.0
+    run_until(11_600)
+    assert syncs[-1] == 11_600
+    # Turned off in settings: no sync after a map.
+    app.store.settings["maps"]["sync_after_map"] = False
+    one_map(6)
+    run_until(13_000)
+    assert syncs[-1] == 11_600

@@ -365,6 +365,14 @@
     </section>
 
     <section class="panel">
+      <h2 x-text="t('maps.title')"></h2>
+      <p class="hint" x-text="t('maps.hint')"></p>
+      <label class="inline"><input type="checkbox" x-model="draft.settings.maps.sync_after_map">
+        <span x-text="t('maps.sync')"></span></label>
+      <p class="hint" x-text="t('maps.sync.hint')"></p>
+    </section>
+
+    <section class="panel">
       <h2 x-text="t('idle.title')"></h2>
       <p class="hint" x-text="t('idle.hint')"></p>
       <div class="grid2">
