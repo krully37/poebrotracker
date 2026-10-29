@@ -29,7 +29,7 @@ def data(league="Allflame"):
                 {"id": 11, "name": "Currency", "tabValues": [{"value": 300, "createdAt": "$D2026-10-29T16:00:00.000Z"}],
                  "items": [{"quantity": 1500, "tabID": 11, "price": {"name": "Chaos Orb", "value": 0.2, "category": "currency"}}]},
                 {"id": 12, "name": "Maps", "tabValues": [{"value": 9, "createdAt": "$D2026-10-29T16:00:00.000Z"}],
-                 "items": [{"quantity": 9, "tabID": 12, "price": {"name": "Map (Tier 12)", "value": 1, "category": "maps"}},
+                 "items": [{"quantity": 9, "tabID": 12, "price": {"name": "Map (Tier 12)", "value": 2, "category": "maps"}},
                            # 4 chaos for the stack: under the account's 10-chaos threshold, not counted
                            {"quantity": 2, "tabID": 12, "price": {"name": "Map (Tier 1)", "value": 2, "category": "maps"}}]},
             ],
@@ -47,7 +47,7 @@ def test_reads_league_items_and_divine_price():
     assert snap.div_price == 200.0  # this league's, not hardcore's
     assert [(i.name, i.quantity, i.tab) for i in snap.items] == [("Chaos Orb", 1500, "Currency"), ("Map (Tier 12)", 9, "Maps")]
     assert snap.items[0].value == pytest.approx(1500 * 0.2 / 200)  # the stack, in divines
-    assert snap.total == pytest.approx((300 + 9) / 200)
+    assert snap.total == pytest.approx((300 + 18) / 200)  # the 4-chaos T1 stack is left out
     assert snap.time == pytest.approx(1793291183.0)  # lastSynced: when the value was true
 
 
