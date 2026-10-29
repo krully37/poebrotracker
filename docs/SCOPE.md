@@ -246,6 +246,14 @@ Decided 2026-10-29.
 
 ## 9. Open questions
 
+- **Waiting on the owner (2026-10-30):**
+  - Map tracker, chosen while building step 9 with recommendations (§5c):
+    1. Should existing installs get the new Maps page added on their own? Fresh installs and "Reset" already get it, as the last page.
+    2. Is the per-second map timer fine on the real screen, or should it update once a minute?
+    3. Should the current league's own areas (`DeepwaterEncounter`, `DeepwaterHub`) count as maps?
+  - Still to try on the real screen during real mapping: the live timer, and the WealthyExile sync after a map against the live site.
+  - **iPhone as the screen (idea, 2026-10-30):** an old iPhone shows the pages over Wi-Fi instead of the ESP32 screen. The plan is a web page that reuses the simulator's compositing and touch, served by a second, display-only server on the local network, with its own token in a QR-code link. The settings server stays on 127.0.0.1. Opened with "Add to Home Screen", Auto-Lock off and Guided Access. Waiting on two answers: the iPhone model and iOS version (old Safari may need extra work), and whether a LAN display server is acceptable given the 127.0.0.1 rule. About a day of work, with no firmware change.
+
 - WealthyExile, **found 2026-10-29** (owner's account, from his Chrome tab):
   - No JSON API. The stash page's HTML (`GET https://wealthyexile.com/`, Next.js) embeds everything in its `self.__next_f` payload: `user.preferredLeague`, `user.lastSynced`, per-tab `tabValues` (hourly, chaos), `items` (name, quantity, tab, chaos price, icon, category) and `priceMap` (Divine Orb price per league). It also embeds an `accessToken`: never logged, dumped or kept.
   - A free account's data changes only when it is synced: loading the page does not sync (last sync 16:26 UTC, still so at 18:04 after several loads). The hourly sync is premium-only. The site's **Sync stash** button calls the `syncUser` server action (not `syncTabs`, as first thought); a tap on the screen calls it too (§6).

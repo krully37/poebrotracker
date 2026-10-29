@@ -113,8 +113,13 @@ def test_cat_bounces_inside_the_screen_and_faces_where_it_goes():
     sim.files[p.IDLE_FILE] = {"data": f.data, "crc": f.crc, "size": len(f.data), "format": "sprite"}
     sim.last_rx = clock.t
     assert sim._set_idle(p.IDLE_FILE, clock.t) == {"ok": True}
-    signs, bounces = (sim.idle["vx"] > 0, sim.idle["vy"] > 0), 0
-    for _ in range(600):  # 30 s at 20 steps a second
+    signs, bounces, last_bounce = (sim.idle["vx"] > 0, sim.idle["vy"] > 0), 0, clock.t
+    steps = 0
+    # 30 s at 20 steps a second, then on until 1 s (4 turn time constants) has passed since the
+    # last bounce, so the facing check below never catches the cat mid-turn.
+    while steps < 600 or clock.t - last_bounce < 4 * p.IDLE_TURN:
+        assert steps < 1200
+        steps += 1
         clock.t += 0.05
         sim.last_rx = clock.t
         sim.tick()
@@ -123,7 +128,8 @@ def test_cat_bounces_inside_the_screen_and_faces_where_it_goes():
         assert 0 <= st["x"] - left + 0.5 and st["x"] + right <= 480 + 0.5
         assert 0 <= st["y"] - top + 0.5 and st["y"] + bottom <= 320 + 0.5
         now_signs = (st["vx"] > 0, st["vy"] > 0)
-        bounces += now_signs != signs
+        if now_signs != signs:
+            bounces, last_bounce = bounces + 1, clock.t
         signs = now_signs
     assert bounces >= 5
     assert abs(math.hypot(sim.idle["vx"], sim.idle["vy"]) - p.IDLE_SPEED) < 1e-6  # bounces keep the speed
