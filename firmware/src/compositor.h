@@ -58,7 +58,21 @@ struct Scene {
 };
 
 void push(const Scene &scene);
+// The scene drawn into a panel-order buffer (kPixels values) instead of the panel.
+void render(const Scene &scene, uint16_t *out);
+// Darkens a panel-order buffer to `percent` of its brightness, in place.
+void dim(uint16_t *flat, int percent);
 // A page composited on the way out, for what changes every frame (the offline screen too).
 void push(const Layer &layer);
+
+// An animation played over the page: the canvas (landscape) where the mask is set, over `base`
+// (panel order: the page as it was, dimmed), with `top` (an overlay, or nullptr) over it all.
+struct OverPage {
+  const uint16_t *canvas;
+  const uint8_t *mask;
+  const uint16_t *base;
+  const uint8_t *top = nullptr;
+};
+void push(const OverPage &frame);
 
 }  // namespace compositor

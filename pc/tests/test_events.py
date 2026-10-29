@@ -167,19 +167,20 @@ def see_through_gif() -> bytes:
     return buf.getvalue()
 
 
-def test_see_through_gif_is_fitted_in_the_bottom_right_corner(tmp_path):
+def test_see_through_gif_is_fitted_and_centred_on_the_bottom_edge(tmp_path):
     media = MediaStore(tmp_path / "m")
     builder = contentlib.ContentBuilder(media)
     _, f, _ = builder.animation("death", media.add("cat.gif", see_through_gif())["id"])
     assert f.over_page
     with Image.open(io.BytesIO(f.data)) as im:
         first = im.convert("RGBA")
-    # Scaled to the screen's height (180×320) and pushed against the right edge.
+    # Scaled to the screen's height (180×320), centred left to right: x 150 to 330.
     assert first.size == (480, 320)
     assert first.getpixel((100, 300))[3] == 0  # left of the cat: the page shows
-    assert first.getpixel((400, 50))[3] == 0  # the see-through top half
-    assert first.getpixel((400, 300)) == (255, 0, 0, 255)
-    assert first.getpixel((305, 300)) == (255, 0, 0, 255)
+    assert first.getpixel((400, 300))[3] == 0  # and right of it
+    assert first.getpixel((240, 50))[3] == 0  # the see-through top half
+    assert first.getpixel((155, 300)) == (255, 0, 0, 255)
+    assert first.getpixel((325, 300)) == (255, 0, 0, 255)
     # An opaque GIF still fills the screen.
     _, opaque, _ = builder.animation("levelup", media.add("x.gif", gif(1.0))["id"])
     assert not opaque.over_page
@@ -317,6 +318,6 @@ def test_see_through_gif_plays_over_the_dimmed_page(screen_app):
     shown = sim.frame()
     # The page, dimmed, wherever the GIF is see-through; the GIF where it is not.
     dimmed = ImageEnhance.Brightness(page).enhance(p.EVENT_DIM)
-    for box in ((0, 0, 300, 320), (300, 0, 480, 160)):
+    for box in ((0, 0, 150, 320), (330, 0, 480, 320), (150, 0, 330, 160)):  # the GIF: x 150 to 330, lower half
         assert max(hi for _, hi in ImageChops.difference(shown.crop(box), dimmed.crop(box)).getextrema()) <= 1
-    assert shown.getpixel((400, 300)) in ((255, 0, 0), (0, 0, 255))
+    assert shown.getpixel((240, 300)) in ((255, 0, 0), (0, 0, 255))

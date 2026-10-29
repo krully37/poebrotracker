@@ -144,15 +144,21 @@ def see_through(path: Path) -> bool:
 
 
 def gif_over_page(path: Path) -> bytes:
-    """A see-through GIF for playing over the page: fitted inside the screen, in the bottom-right
-    corner. GIF pixels are opaque or see-through, nothing in between."""
+    """A see-through GIF for playing over the page: fitted inside the screen, on its bottom edge,
+    with what it shows centred left to right (decided 2026-10-29: the built-in death cat is drawn
+    at the right of its frame). GIF pixels are opaque or see-through, nothing in between."""
     with Image.open(path) as im:
-        frames, durations = [], []
+        fitted, durations = [], []
         for frame in ImageSequence.Iterator(im):
-            fitted = ImageOps.contain(frame.convert("RGBA"), (WIDTH, HEIGHT), Image.Resampling.LANCZOS)
-            layer = Image.new("RGBA", (WIDTH, HEIGHT))
-            layer.paste(fitted, (WIDTH - fitted.width, HEIGHT - fitted.height))
-            frames.append(layer)
+            fitted.append(ImageOps.contain(frame.convert("RGBA"), (WIDTH, HEIGHT), Image.Resampling.LANCZOS))
             durations.append(max(20, int(frame.info.get("duration", im.info.get("duration", 100)))))
+    boxes = [box for f in fitted if (box := f.getchannel("A").getbbox())]
+    left, right = (min(b[0] for b in boxes), max(b[2] for b in boxes)) if boxes else (0, fitted[0].width)
+    x = WIDTH // 2 - (left + right) // 2
+    frames = []
+    for f in fitted:
+        layer = Image.new("RGBA", (WIDTH, HEIGHT))
+        layer.paste(f, (x, HEIGHT - f.height))
+        frames.append(layer)
     return gif.encode(frames, durations, see_through=True)
 

@@ -5,6 +5,7 @@
 #include <esp_heap_caps.h>
 #include <math.h>
 
+#include "anim.h"
 #include "compositor.h"
 #include "decor_sprites.h"
 #include "display.h"
@@ -28,6 +29,7 @@ using compositor::Sprite;
 
 constexpr uint8_t kFull = 255;
 constexpr uint8_t kDim = 77;  // 30 %, docs/PROTOCOL.md
+constexpr int kUnderAnimation = 40;  // % brightness of the page under an over-the-page animation
 constexpr uint32_t kSlideMs = 280;
 constexpr int kMaxDots = 8;
 constexpr int kDotGap = 14;
@@ -37,7 +39,7 @@ constexpr uint16_t kGold = compositor::rgb565(kGoldR, kGoldG, kGoldB);
 // one counts as lifting it.
 constexpr uint32_t kLiftMs = 60;
 
-enum class Mode { None, Waiting, Disconnected, Page };
+enum class Mode { None, Waiting, Disconnected, Page, Animation };
 
 // A page made ready to draw: background decoded, then composited with its overlay into panel
 // order (compositor::flatten). Three of them: the current page and its two neighbours, so a
@@ -54,7 +56,8 @@ uint8_t *scratchOv;  // an overlay unpacked just long enough to flatten its page
 
 uint16_t *offlineBg;
 uint8_t *offlineOv;
-uint8_t *topRaw;  // the toast or the reset banner, unpacked
+uint8_t *topRaw;  // the toast, the reset banner or the event's text, unpacked
+uint16_t *dimmed;  // the page under an over-the-page animation, panel order
 std::string offlineKey, topKey;
 
 // The PC's latest word, copied from `state` when its version changes.
@@ -63,6 +66,9 @@ std::vector<Page> pages;
 std::map<std::string, Overlay> overlays;
 size_t current = 0;
 std::string toastId;
+bool playing = false;
+Play play;
+uint32_t playStarted = ~0u;  // play.startMs of the animation on screen
 
 Mode shown = Mode::None;
 bool dirty = true;
@@ -252,7 +258,57 @@ void showOffline(Mode mode) {
   display::backlight(kDim);
 }
 
+// Loads one event animation into PSRAM when there is one to load; looks twice a second at most.
+void preloadSoon(uint32_t now) {
+  static uint32_t last = 0;
+  if (now - last < 500) return;
+  last = now;
+  anim::preloadOne();
+}
+
 // --- Frame ---------------------------------------------------------------------------------
+
+// The overlay with this id unpacked into topRaw, or nullptr.
+const uint8_t *topOverlay(const std::string &id) {
+  auto it = id.empty() ? overlays.end() : overlays.find(id);
+  if (it == overlays.end()) return nullptr;
+  std::string key = id + ":" + it->second.crc;
+  if (topKey != key) topKey = compositor::inflate(it->second.data->data(), it->second.data->size(), topRaw) ? key : "";
+  return topKey == key ? topRaw : nullptr;
+}
+
+Scene pageScene(Sprite *sprites) {
+  Scene scene;
+  scene.page = prepare(pages[current]).flat;
+  scene.sprites = sprites;
+  scene.spriteCount = addDots(sprites, 0);
+  return scene;
+}
+
+void showAnimation(uint32_t now, bool online) {
+  bool overPage = play.overPage && online && !pages.empty();
+  if (play.startMs != playStarted) {
+    playStarted = play.startMs;
+    if (overPage) {  // the page as it was, dots included, dimmed; it shows where the GIF is see-through
+      Sprite sprites[kMaxDots];
+      compositor::render(pageScene(sprites), dimmed);
+      compositor::dim(dimmed, kUnderAnimation);
+    }
+    anim::start(play.file, overPage);
+  }
+  if (!anim::advance(now)) return;
+  const uint8_t *top = topOverlay(play.overlay);
+  if (overPage) {
+    compositor::OverPage frame{anim::canvas(), anim::mask(), dimmed, top};
+    compositor::push(frame);
+  } else {
+    compositor::Layer layer;
+    layer.bg = anim::canvas();
+    layer.overlay = top;
+    compositor::push(layer);
+  }
+  display::backlight(online || play.file == "boot" ? kFull : kDim);
+}
 
 void showPage(uint32_t now) {
   Scene scene;
@@ -281,14 +337,7 @@ void showPage(uint32_t now) {
   std::string action;
   holdShown = tracker.hold(now, progress, action);
   std::string topId = holdShown ? kHoldOverlay + action : toastId;
-  auto it = topId.empty() ? overlays.end() : overlays.find(topId);
-  if (it != overlays.end()) {
-    std::string key = topId + ":" + it->second.crc;
-    if (topKey != key) {
-      topKey = compositor::inflate(it->second.data->data(), it->second.data->size(), topRaw) ? key : "";
-    }
-    if (topKey == key) scene.top = topRaw;
-  }
+  scene.top = topOverlay(topId);
   if (holdShown) {
     scene.barX = kHoldBarX;
     scene.barY = kHoldBarY;
@@ -317,7 +366,18 @@ void begin() {
   compositor::fill(offlineBg, 0);
   offlineOv = compositor::allocOverlay();
   topRaw = compositor::allocOverlay();
+  dimmed = static_cast<uint16_t *>(heap_caps_malloc(compositor::kPixels * 2, MALLOC_CAP_SPIRAM));
+  anim::begin();
   touch::begin();
+  // The start animation, from flash, before the PC is there (docs/PROTOCOL.md, "Boot").
+  uint32_t length = anim::bootLength("boot");
+  if (length) {
+    State::Lock l;
+    uint32_t now = millis();
+    state.play = Play{"boot", "", now, now + length, false};
+    state.playing = true;
+    ++state.version;
+  }
   tick();
 }
 
@@ -330,6 +390,10 @@ void tick() {
       state.toast.clear();  // its overlay stays, like the simulator's
       ++state.version;
     }
+    if (state.playing && (int32_t)(now - state.play.untilMs) >= 0) {
+      state.playing = false;
+      ++state.version;
+    }
     online = state.online(now);
     everHeard = state.everHeard;
     if (state.version != seenVersion) {
@@ -338,15 +402,29 @@ void tick() {
       overlays = state.overlays;
       current = state.current < pages.size() ? state.current : 0;
       toastId = state.toast;
+      playing = state.playing;
+      play = state.play;
       if (slide.from >= pages.size()) slide.on = false;
       dirty = true;
     }
+  }
+  if (playing) {
+    // Touch still works under an animation, like the simulator: a swipe changes the page beneath.
+    if (online && !pages.empty()) readTouch(now);
+    showAnimation(now, online);
+    shown = Mode::Animation;
+    return;
+  }
+  if (shown == Mode::Animation) {
+    shown = Mode::None;  // the animation ended: draw what is underneath again
+    playStarted = ~0u;
   }
   Mode mode = online && !pages.empty() ? Mode::Page : everHeard ? Mode::Disconnected : Mode::Waiting;
   if (mode != Mode::Page) {
     tracker = gestures::Tracker();  // a finger on the offline screen does nothing
     if (mode != shown) showOffline(mode);
     shown = mode;
+    preloadSoon(now);
     return;
   }
   readTouch(now);
@@ -365,10 +443,14 @@ void tick() {
     const Page &prev = pages[(current + pages.size() - 1) % pages.size()];
     if (!isPrepared(next)) {
       prepare(next);
-    } else if (!isPrepared(prev)) {
+      return;
+    }
+    if (!isPrepared(prev)) {
       prepare(prev);
+      return;
     }
   }
+  if (!tracker.touching()) preloadSoon(now);
 }
 
 }  // namespace screen

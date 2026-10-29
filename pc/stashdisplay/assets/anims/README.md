@@ -9,7 +9,7 @@ Put the default animations here. They ship with the app and are sent to the scre
 
 Guidelines:
 - 480×320. Other sizes are cropped to fill the screen, centred.
-- A GIF with see-through pixels plays over the current page instead, which stays underneath, dimmed. Other sizes are fitted inside the screen, in the bottom-right corner. Pixels are either opaque or see-through (below half alpha counts as see-through).
+- A GIF with see-through pixels plays over the current page instead, which stays underneath, dimmed. They are fitted inside the screen, on its bottom edge, with what they show centred left to right. Pixels are either opaque or see-through (below half alpha counts as see-through).
 - About 1 MB or less each: they share the screen's ~11 MB with the page backgrounds.
 - Around 15 fps until the real frame rate is measured on the hardware.
 - No text is drawn on top, so bake in anything you want shown.

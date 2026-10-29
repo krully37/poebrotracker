@@ -183,7 +183,40 @@ void flatten(const Layer &layer, uint16_t *flat) {
   }
 }
 
+void overPageStrip(uint16_t *dst, int y0, int rows, void *ctx) {
+  const OverPage &F = *static_cast<const OverPage *>(ctx);
+  copyRows(dst, F.base, y0, rows);
+  for (int px = 0; px < W; ++px) {
+    size_t s = (size_t)(kLandscapeH - 1 - px) * kLandscapeW + y0;
+    const uint8_t *m = F.mask + s;
+    uint64_t any[2] = {0, 0};
+    if (rows == 16) memcpy(any, m, 16);
+    if (rows != 16 || any[0] || any[1]) {
+      for (int k = 0; k < rows; ++k) {
+        if (m[k]) dst[k * W + px] = __builtin_bswap16(F.canvas[s + k]);
+      }
+    }
+    if (F.top) overRun(dst + px, F.top, s, rows);
+  }
+}
+
 void push(const Scene &scene) { display::pushFrame(sceneStrip, const_cast<Scene *>(&scene)); }
+
+void render(const Scene &scene, uint16_t *out) {
+  for (int y = 0; y < display::kHeight; y += display::kStripRows) {
+    sceneStrip(out + (size_t)y * W, y, display::kStripRows, const_cast<Scene *>(&scene));
+  }
+}
+
+void dim(uint16_t *flat, int percent) {
+  for (size_t i = 0; i < kPixels; ++i) {
+    uint16_t c = __builtin_bswap16(flat[i]);
+    int r = (c >> 11) * percent / 100, g = ((c >> 5) & 63) * percent / 100, b = (c & 31) * percent / 100;
+    flat[i] = __builtin_bswap16((r << 11) | (g << 5) | b);
+  }
+}
+
+void push(const OverPage &frame) { display::pushFrame(overPageStrip, const_cast<OverPage *>(&frame)); }
 
 void push(const Layer &layer) { display::pushFrame(layerStrip, const_cast<Layer *>(&layer)); }
 
