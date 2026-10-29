@@ -7,7 +7,7 @@ A USB-wired 3.5" desk screen (Guition JC3248W535, ESP32-S3) that shows a Path of
 - `pc/`: the Python app (renderer, settings page, screen link, simulator). Setup and run commands are in `pc/README.md`.
 - `firmware/`: the screen side. Board drivers in `lib/board/`, the step 5 bench in `src/bench/`; the firmware itself is step 6. Build and flash commands are in `firmware/README.md`.
 
-Status on 2026-10-29: steps 1–7 are done. The screen syncs with the PC app and shows the real stash from WealthyExile (or PoE Pricer), with animations, the idle cat and moving backgrounds (`docs/SCOPE.md` §6, §8b and §9). Step 8 is done too: `pc/packaging/build.py` builds `StashDisplay.exe`, GitHub Actions builds it and checks the firmware, and `docs/INSTALL.md` is the friend's guide. What is left is handing the screen over. `git log` shows anything newer.
+Status on 2026-10-30: steps 1–9 are done. The screen syncs with the PC app and shows the real stash from WealthyExile (or PoE Pricer), with animations, the idle cat and moving backgrounds (`docs/SCOPE.md` §6, §8b and §9). Step 8: `pc/packaging/build.py` builds `StashDisplay.exe`, GitHub Actions builds it and checks the firmware, and `docs/INSTALL.md` is the friend's guide. Step 9, the map tracker (`pc/stashdisplay/maps.py`, §5c): maps from `Client.txt`, a live map timer, the Maps page and its metrics, and a WealthyExile sync after each map; checked against the owner's log and in the simulator, not yet on the real screen while mapping. What is left is handing the screen over. `git log` shows anything newer.
 
 ## How to work here
 
