@@ -66,7 +66,7 @@ The PC compares this with what it wants on the screen and only sends what differ
 **Transfers:**
 - **Chunks** must arrive in order: the chunk's offset equals the bytes received so far. Otherwise the ACK is `{"ok": false, "error": "offset", "have": n}`, and the PC restarts the transfer.
 - **Kinds:**
-  - `overlay` goes to PSRAM under `id`: a page id, `@event` for an event animation's text, or `@hold-<action>` for the long-press banners (sent with every sync, after the pages). Ids starting with `@` stay when PAGES changes.
+  - `overlay` goes to PSRAM under `id`: a page id, `@event` for an event animation's text, or `@hold-<action>` for the long-press banners (sent with every sync, after the pages). Ids starting with `@` stay when PAGES changes. A page's overlay can also come on its own, without a PAGES after it, and replaces the one shown as soon as it arrives: since 2026-10-30 the PC re-sends the page shown about once a second while the map timer runs on it (`docs/SCOPE.md` §5c); the next PAGES lists its new crc.
   - `file` goes to flash. `BEGIN` is refused with `"no_space"` (plus `flash_free`) when it cannot fit, counting the space a file of the same id would free.
   - `toast` is an overlay shown over the current page for `seconds` (default 2), then forgotten.
 - **File ids:** `bg-<hash>` are page backgrounds, `anim-<event>-<hash>` event animations (`launch`, `levelup`, `death`), `boot` the start animation, `idle` the idle cat. A sync deletes every file the PC no longer wants, `boot` included (since 2026-10-28 the PC sends it like the others). Animations, `boot` included, are sent after the page list, so the pages show up first. An event whose animation is the same as `boot` gets no file of its own: PLAY names `boot`.

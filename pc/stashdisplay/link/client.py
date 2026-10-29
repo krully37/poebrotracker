@@ -95,6 +95,12 @@ class ScreenLink:
     def request_sync(self) -> None:
         self.jobs.put(("sync",))
 
+    def refresh_page(self, page: PageContent) -> None:
+        """Send one page's new overlay now, without a whole sync: the map timer ticking on the
+        page shown. The screen swaps it in as it arrives; the next sync lists its new crc."""
+        if self.state != "searching":
+            self.jobs.put(("page", page))
+
     def toast(self, overlay: bytes, seconds: float = 2.0) -> None:
         self.jobs.put(("toast", overlay, seconds))
 
@@ -185,6 +191,12 @@ class ScreenLink:
             while not self.jobs.empty() and self.jobs.queue[0][0] == "sync":
                 self.jobs.get_nowait()  # several saves in a row need one sync
             self._sync()
+        elif kind == "page":
+            page = job[1]
+            have = self.inventory.setdefault("overlays", {})
+            if page.id in have and have[page.id] != page.crc:  # only a page the screen already holds
+                self._transfer("overlay", page.id, page.overlay)
+                have[page.id] = page.crc
         elif kind == "toast":
             self._transfer("toast", "@toast", job[1], seconds=job[2])
         elif kind == "play":

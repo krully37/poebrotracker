@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 
 import pytest
@@ -259,3 +260,47 @@ def test_app_shows_real_maps_once_there_is_one_and_resets_them_with_the_session(
     assert app.render_data(force_demo=True)[0].current_map.name == "City Square"
     app.on_screen_event({"type": "reset", "action": "reset_session"})
     assert app.render_data()[0].metrics["maps_session"] == 0
+
+
+def test_the_timer_ticks_on_the_screen_by_resending_the_page_shown(tmp_path):
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.link import protocol as p
+    from stashdisplay.link.simulator import SimRunner, SimScreen
+    from stashdisplay.link.transport import LoopbackPair
+    from stashdisplay.media import MediaStore
+    from stashdisplay.render import renderer
+    from stashdisplay.settings import Store
+
+    from test_link import wait_for
+
+    clock = Clock(2_000_000_000.0)
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"),
+              maps=MapTracker(None, Characters(None), idle_seconds=lambda: 0, clock=clock))
+    pair = LoopbackPair()
+    sim = SimScreen(pair.screen)
+    runner = SimRunner(sim).start()
+    try:
+        app.start_link(lambda: [pair.pc] if pair.plugged else [])
+        wait_for(lambda: app.link.state == "connected" and "maps" in sim.overlays)
+        maps_page = next(pg for pg in app.store.pages if pg["id"] == "maps")
+
+        def rendered() -> str:
+            return p.crc_hex(p.encode_overlay(renderer.overlay(maps_page, app.render_data()[0])))
+
+        app.maps.feed(area("MapWorldsStrand", seed=4))  # a new map: a whole sync
+        wait_for(lambda: sim.overlays["maps"][0] == rendered())
+        before = dict(sim.overlays)
+        clock.t += 1
+        app._map_tick(app.maps.tick())
+        time.sleep(0.3)
+        assert sim.overlays == before  # the first page is shown: nothing to send
+        app.link.current_page = "maps"  # the friend swiped to the Maps page
+        clock.t += 1
+        app._map_tick(app.maps.tick())
+        wait_for(lambda: sim.overlays["maps"][0] == rendered() != before["maps"][0])
+        assert {k: v for k, v in sim.overlays.items() if k != "maps"} == {k: v for k, v in before.items() if k != "maps"}
+        app._map_tick(False)  # the timer did not move (paused): nothing is sent
+    finally:
+        app.link.stop()
+        runner.close()

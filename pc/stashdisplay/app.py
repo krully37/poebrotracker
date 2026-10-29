@@ -21,7 +21,7 @@ from .gamelog import Characters, GameEvent, LogWatcher, find_client_log
 from .history import History
 from .idle import IdleWatch
 from .link import protocol
-from .link.client import Content, ScreenLink
+from .link.client import Content, PageContent, ScreenLink
 from .link.content import ContentBuilder
 from .link.transport import Port, SerialPort, candidate_ports
 from .maps import MapTracker
@@ -344,8 +344,25 @@ class App:
 
     def start_watcher(self) -> LogWatcher:
         self.watcher = LogWatcher(self.client_log, self.characters, self.on_game_event, on_line=self.maps.feed).start()
-        self.maps.start()
+        self.maps.start(on_tick=self._map_tick)
         return self.watcher
+
+    def _map_tick(self, changed: bool) -> None:
+        """The map timer moved on: re-send the page shown if it has the current-map card, alone,
+        so the timer ticks on the screen (the other pages wait for the next sync)."""
+        page = self._shown_page() if changed and self.link else None
+        if page is None or not any(slot and slot["widget"] == "current_map" for slot in page["slots"].values()):
+            return
+        data, _ = self.render_data()
+        with self._render_lock:
+            overlay = protocol.encode_overlay(renderer.overlay(page, data))
+        self.link.refresh_page(PageContent(page["id"], overlay, {}))
+
+    def _shown_page(self) -> dict | None:
+        """The page on the screen, as it last said (the first one until it says)."""
+        shown = pagelib.visible(self.store.pages)
+        current = self.link.current_page if self.link else None
+        return next((p for p in shown if p["id"] == current), shown[0] if shown else None)
 
     def on_game_event(self, event: GameEvent) -> None:
         if self.store.settings["events"][event.kind]["enabled"]:
