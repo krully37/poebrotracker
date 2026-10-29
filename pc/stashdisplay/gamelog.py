@@ -194,10 +194,11 @@ class LogWatcher:
     """Follows Client.txt and reports GameEvents. `step()` does one read; the thread repeats it."""
 
     def __init__(self, locate: Callable[[], Path | None], characters: Characters,
-                 on_event: Callable[[GameEvent], None]):
+                 on_event: Callable[[GameEvent], None], on_line: Callable[[str], None] | None = None):
         self.locate = locate
         self.characters = characters
         self.on_event = on_event
+        self.on_line = on_line  # every new line, after the events: the map tracker reads the same stream
         self.path: Path | None = None
         self.identity: tuple[int, int] | None = None
         self.pos = 0
@@ -258,13 +259,19 @@ class LogWatcher:
         self.pos += len(data)
         *lines, self.partial = (self.partial + data).split(b"\n")
         for raw in lines:
-            event = parse(raw.decode("utf-8", "replace"), self.characters)
+            text = raw.decode("utf-8", "replace")
+            event = parse(text, self.characters)
             if event:
                 self.last_event = {"kind": event.kind, "name": event.name, "level": event.level, "time": time.time()}
                 try:
                     self.on_event(event)
                 except Exception:
                     log.exception("game event handler failed")
+            if self.on_line:
+                try:
+                    self.on_line(text)
+                except Exception:
+                    log.exception("Client.txt line handler failed")
         return True
 
     def status(self) -> dict:
