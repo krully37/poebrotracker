@@ -271,10 +271,10 @@ def test_app_tap_and_resets(tmp_path):
     assert data.metrics["rate"] is not None
     app.on_screen_event({"type": "tap", "page": "total"})
     assert toasts == []  # the demo's last point is minutes old: refresh allowed
-    refreshed = app.last_snapshot.time
+    refreshed = app._demo_snapshot.time
     app.on_screen_event({"type": "tap", "page": "total"})
     assert toasts == []  # too soon: no refresh, and nothing on the screen
-    assert app.last_snapshot.time == refreshed
+    assert app._demo_snapshot.time == refreshed
     app.on_screen_event({"type": "reset", "action": "reset_rate", "page": "total"})
     data, _ = app.render_data()
     assert data.metrics["rate"] is None  # counting again from now

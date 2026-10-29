@@ -1,9 +1,9 @@
 """The running app: settings, assets, media, history, the data shown on the pages, the screen,
 the game events read from Client.txt, and the idle cat.
 
-The settings page, the tray and the screen link all talk to one App. Until the WealthyExile
-step, the history is demo data that grows by one point every 5 minutes, so the screen and
-the simulator show something that moves and can be reset.
+The settings page, the tray and the screen link all talk to one App. The stash comes from
+WealthyExile once a cookie is saved and it has answered; until then the pages show demo data that
+grows by one point every 5 minutes, so the screen and the simulator show something that moves.
 """
 
 import dataclasses
@@ -16,6 +16,7 @@ from collections.abc import Callable
 from . import paths
 from .assets import AssetCache
 from .gamelog import Characters, GameEvent, LogWatcher, find_client_log
+from .history import History
 from .idle import IdleWatch
 from .link import protocol
 from .link.client import Content, ScreenLink
@@ -27,6 +28,8 @@ from .nowplaying import Player, create_player
 from .render import data as renderdata
 from .render import fonts, renderer, theme
 from .settings import Store
+from .sources import wealthyexile
+from .sources.base import Snapshot, SourceError
 
 log = logging.getLogger(__name__)
 
@@ -39,18 +42,26 @@ CARD_SECONDS = 4.0  # the text stand-in for an event without a GIF
 
 
 class App:
-    def __init__(self, store: Store, assets: AssetCache, media: MediaStore, characters: Characters | None = None):
+    def __init__(self, store: Store, assets: AssetCache, media: MediaStore, characters: Characters | None = None,
+                 history: History | None = None):
         self.store = store
         self.assets = assets
         self.media = media
-        self.live_data: renderdata.RenderData | None = None
         self.status = {"screen": "disconnected", "last_sync": None, "error": None}
         self.on_save: list[Callable[[], None]] = [self._screen_sync]
         self._render_lock = threading.RLock()  # Pillow fonts are not safe to share across threads
         self._data_lock = threading.RLock()
+        # Demo data, until WealthyExile answers.
         self._demo_source = None
-        self.history = None
+        self._demo_history = None
+        self._demo_snapshot = None
+        # The real stash: live once WealthyExile has given a snapshot.
+        self.live = False
+        self.history = history or History()  # in memory unless given (App.create loads the saved one)
         self.last_snapshot = None
+        self.last_fetch = 0.0  # when WealthyExile was last read (a tap reads again, at most every minute)
+        self._fetch_now = threading.Event()
+        self._fetcher: threading.Thread | None = None
         self.content = ContentBuilder(media)
         self.link: ScreenLink | None = None
         self.simulator = None  # (SimScreen, LoopbackPair) when started with --simulator
@@ -67,7 +78,8 @@ class App:
     def create(cls, offline: bool = False) -> "App":
         store = Store.load(paths.settings_path())
         assets = AssetCache(offline=offline)
-        app = cls(store, assets, MediaStore(paths.app_dir() / "media"), Characters(paths.characters_path()))
+        app = cls(store, assets, MediaStore(paths.app_dir() / "media"), Characters(paths.characters_path()),
+                  History.load(paths.history_path()))
         fonts.register_fontin(assets.fontin())
         return app
 
@@ -77,14 +89,56 @@ class App:
 
         if self._demo_source is None:
             # The last point is a couple of minutes old, like a real fetch would be.
-            self.history, self._demo_source, self.last_snapshot = demo_history(now - 130, seed=7)
+            self._demo_history, self._demo_source, self._demo_snapshot = demo_history(now - 130, seed=7)
             return
         while self._demo_source.sim_time + self._demo_source.step <= now:
-            self._add(self._demo_source.fetch())
+            self._demo_add(self._demo_source.fetch())
 
-    def _add(self, snap) -> None:
-        self.history.add(snap.time, snap.total, snap.league)
-        self.last_snapshot = snap
+    def _demo_add(self, snap) -> None:
+        self._demo_history.add(snap.time, snap.total, snap.league)
+        self._demo_snapshot = snap
+
+    def _shown(self, now: float, force_demo: bool = False) -> tuple[History, Snapshot]:
+        """The history and snapshot the pages show: the real ones once live, else demo data."""
+        if self.live and not force_demo:
+            return self.history, self.last_snapshot
+        self._demo_tick(now)
+        return self._demo_history, self._demo_snapshot
+
+    # --- WealthyExile ----------------------------------------------------------------------
+
+    def start_fetching(self) -> threading.Thread:
+        """Read WealthyExile every `interval` seconds while a cookie is saved, and on request."""
+        def run() -> None:
+            while True:
+                self._fetch_now.wait(5)
+                asked = self._fetch_now.is_set()
+                self._fetch_now.clear()
+                if self.store.cookie and (asked or time.time() - self.last_fetch >= self.store.settings["interval"]):
+                    if self.fetch(time.time()):
+                        self._screen_sync()
+
+        self._fetcher = threading.Thread(target=run, daemon=True, name="wealthyexile")
+        self._fetcher.start()
+        return self._fetcher
+
+    def fetch(self, now: float) -> bool:
+        """Read WealthyExile once. A failure keeps the last good values and says why in the status."""
+        self.last_fetch = now
+        try:
+            snap = wealthyexile.fetch(self.store.cookie, now)
+        except SourceError as e:
+            log.info("WealthyExile: %s", e.short)  # never the reply itself: it can carry the session
+            self.status["error"] = e.short
+            return False
+        with self._data_lock:
+            self.history.add(snap.time, snap.total, snap.league)  # one point per WealthyExile sync
+            self.history.save()
+            self.last_snapshot = snap
+            self.live = True
+        self.status["error"] = None
+        self.status["last_sync"] = snap.time
+        return True
 
     def render_data(self, force_demo: bool = False) -> tuple[renderdata.RenderData, bool]:
         """Data for a render, and whether it is demo data."""
@@ -92,17 +146,16 @@ class App:
 
         now = time.time()
         media = self.player.now() if self.player else None
-        if self.live_data is not None and not force_demo:
-            return dataclasses.replace(self.live_data, now=now, media=media), False
         with self._data_lock:
-            self._demo_tick(now)
-            snap = self.last_snapshot
+            history, snap = self._shown(now, force_demo)
+            demo = history is self._demo_history
             s = self.store.settings
             data = renderdata.build(
-                self.history, snap, now=now, synced_at=snap.time, item_prices=demo_prices(snap.div_price),
+                history, snap, now=now, synced_at=snap.time,
+                item_prices=demo_prices(snap.div_price) if demo else None,  # poe.ninja prices: not yet
                 spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon,
             )
-        return dataclasses.replace(data, media=media), True
+        return dataclasses.replace(data, media=media), demo
 
     # --- Screen ---------------------------------------------------------------------------
 
@@ -175,19 +228,19 @@ class App:
             return
         if kind == "tap":
             with self._data_lock:
-                last = self.last_snapshot.time if self.last_snapshot else 0
+                last = self.last_fetch if self.live else (self._demo_snapshot.time if self._demo_snapshot else 0)
                 if now - last < self.store.settings["min_refresh_interval"]:
                     return  # too soon: nothing shows, the data is fresh anyway (owner, 2026-10-29)
                 self.refresh(now)
             self._screen_sync()
         elif kind == "reset" and event.get("action") in TOASTS:
             with self._data_lock:
-                self._demo_tick(now)
+                history, _ = self._shown(now)
                 if event["action"] == "reset_session":
-                    self.history.start_session(now)
+                    history.start_session(now)
                 else:
-                    self.history.rate_start = now
-                self.history.save()
+                    history.rate_start = now
+                history.save()
             self.toast(TOASTS[event["action"]])
             self._screen_sync()
 
@@ -263,11 +316,16 @@ class App:
                 "characters": self.characters.listing()}
 
     def refresh(self, now: float) -> None:
-        """Fetch new data now. Demo: one more point, timed now."""
+        """Fetch new data now: WealthyExile when a cookie is saved (in the background), else one
+        more demo point, timed now."""
+        if self.store.cookie and self._fetcher is not None:
+            self.last_fetch = now
+            self._fetch_now.set()  # syncing WealthyExile first comes once its sync call is known
+            return
         self._demo_tick(now)
         src = self._demo_source
         src.sim_time = now - src.step  # fetch() steps forward, so the point lands exactly now
-        self._add(src.fetch())
+        self._demo_add(src.fetch())
 
     def preview_png(self, page: dict, index: int, count: int, force_demo: bool = False) -> tuple[bytes, bool]:
         data, is_demo = self.render_data(force_demo)

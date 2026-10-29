@@ -95,3 +95,33 @@ def test_fetch_sends_the_cookie_and_spots_logouts_and_cloudflare():
     with pytest.raises(SourceError) as e:
         we.fetch_page("a=b", Session(Reply(status=403, headers={"cf-mitigated": "challenge"})))
     assert e.value.short == we.UNAVAILABLE
+
+
+def test_app_switches_from_demo_to_wealthyexile_and_keeps_the_last_good_value(tmp_path, monkeypatch):
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.settings import Store
+    from stashdisplay.sources.base import Snapshot
+
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    _, demo = app.render_data()
+    assert demo and not app.live
+    replies = [Snapshot(total=38.6, time=1000.0, league="Allflame", div_price=337.1), SourceError(we.UNAVAILABLE)]
+
+    def fetch(cookie, now):
+        reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(we, "fetch", fetch)
+    app.store.cookie = "a=b"
+    assert app.fetch(2000.0)
+    data, demo = app.render_data()
+    assert not demo and app.live and data.metrics["total"] == 38.6
+    assert app.history.points[-1] == (1000.0, 38.6)  # timed at WealthyExile's sync, not at the read
+    assert not app.fetch(2300.0)
+    assert app.status["error"] == we.UNAVAILABLE
+    data, demo = app.render_data()
+    assert not demo and data.metrics["total"] == 38.6  # the last good value stays

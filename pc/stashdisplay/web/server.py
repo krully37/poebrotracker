@@ -119,7 +119,7 @@ def create_app(app: App) -> Flask:
             "has_cookie": bool(store.cookie),
             "media": app.media.list(),
             "status": app.status,
-            "live": app.live_data is not None,
+            "live": app.live,
             "autostart": {"supported": autostart.supported(), "enabled": autostart.enabled()},
             "screen": screen_status(),
             "events": app.events_status(),
