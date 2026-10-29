@@ -7,6 +7,37 @@
 #include <new>
 
 #include "firmware.h"
+#include "storage.h"
+
+namespace {
+
+// AnimatedGIF reads a stored file through these: the handle is a storage::Reader.
+void *fileOpen(const char *id, int32_t *size) {
+  storage::FileInfo f;
+  auto *r = new storage::Reader();
+  if (!storage::info(id, f) || !r->open(id)) {
+    delete r;
+    return nullptr;
+  }
+  *size = f.size;
+  return r;
+}
+
+void fileClose(void *handle) { delete static_cast<storage::Reader *>(handle); }
+
+int32_t fileRead(GIFFILE *f, uint8_t *buf, int32_t len) {
+  len = min(len, f->iSize - f->iPos);
+  if (len <= 0 || !static_cast<storage::Reader *>(f->fHandle)->read(f->iPos, buf, len)) return 0;
+  f->iPos += len;
+  return len;
+}
+
+int32_t fileSeek(GIFFILE *f, int32_t pos) {
+  f->iPos = pos < 0 ? 0 : pos > f->iSize ? f->iSize : pos;
+  return f->iPos;
+}
+
+}  // namespace
 
 // The decoder's ~24 kB of tables stay in internal RAM: big allocations would otherwise go to
 // PSRAM, which makes decoding slower.
@@ -21,13 +52,25 @@ GifPlayer::~GifPlayer() {
   heap_caps_free(gif_);
 }
 
-bool GifPlayer::open(std::shared_ptr<std::vector<uint8_t>> data, uint16_t *canvas, uint8_t *mask) {
+void GifPlayer::start(uint16_t *canvas, uint8_t *mask) {
   close();
   canvas_ = canvas;
   mask_ = mask;
   for (size_t i = 0; i < (size_t)kLandscapeW * kLandscapeH; ++i) canvas_[i] = 0;
   if (mask_) memset(mask_, 0, (size_t)kLandscapeW * kLandscapeH);
   lastW_ = lastH_ = lastDisposal_ = 0;
+}
+
+bool GifPlayer::open(const std::string &id, uint16_t *canvas, uint8_t *mask) {
+  start(canvas, mask);
+  if (!gif_->open(id.c_str(), fileOpen, fileClose, fileRead, fileSeek, draw)) return false;
+  open_ = true;
+  dueMs_ = millis();
+  return true;
+}
+
+bool GifPlayer::open(std::shared_ptr<std::vector<uint8_t>> data, uint16_t *canvas, uint8_t *mask) {
+  start(canvas, mask);
   if (!data || !gif_->open(data->data(), data->size(), draw)) return false;
   data_ = data;
   open_ = true;

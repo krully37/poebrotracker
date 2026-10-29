@@ -201,7 +201,7 @@ Decided 2026-10-29.
     - The idle cat moves at 30 fps, turned with bilinear filtering.
     - **6c-1 done 2026-10-29:** level-up (full screen, twice), death (over the dimmed page) and the boot cat (at power-on, from flash) checked on the screen. The death cat is now centred.
     - **6c-2 done 2026-10-29:** the idle cat bounces and turns on the screen, and a touch brings the pages back (EVENT wake). The turns are not perfectly smooth yet (whole degrees, the sprite turned again for each one); good enough for now (owner).
-    - **6c-3 done 2026-10-29:** a GIF page background plays smoothly behind the overlay on the page shown, holds still on its current frame during a slide or an animation over the page, and the long-press banner shows over it. Pages beside it use its first frame. A background GIF is loaded into PSRAM only when 1 MB stays free; otherwise its first frame shows, still. With everything loaded (three animations, a GIF background) 1.7 MB of PSRAM is left; HELLO's answer carries `psram_free` for that.
+    - **6c-3 done 2026-10-29:** a GIF page background plays smoothly behind the overlay on the page shown, holds still on its current frame during a slide or an animation over the page, and the long-press banner shows over it. Pages beside it use its first frame. A background GIF is read from flash as it plays, never loaded whole into PSRAM (since 2026-10-29: loading it failed when PSRAM was short); so are event animations not preloaded yet. With everything loaded (three animations, a GIF background) 1.7 MB of PSRAM is left; HELLO's answer carries `psram_free` for that.
   - **6d:** video backgrounds (§5). **Done 2026-10-29:** a phone video uploaded in the settings page plays on the screen behind the page and holds still during slides. Per frame: 3 ms to read it from flash (about 6.7 MB/s), 37 ms to decode it.
   - The framing is also unit-tested on the PC (`pio test -e native`).
 - **Flash:** one 3 MB app partition, no over-the-air updates (the owner flashes by USB); LittleFS gets the rest, about 12.9 MB.
@@ -241,5 +241,5 @@ Decided 2026-10-29.
 4b. `Client.txt` event watcher (level-up, death), tested against sample log lines, then a real log.
 5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates. **Done 2026-10-29** (§9).
 6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds, and the boot animation.
-7. WealthyExile reverse-engineering (with your friend logged in), then the adapter.
+7. WealthyExile reverse-engineering, then the adapter. Done with the owner's own WealthyExile account (decided 2026-10-29), not the friend's: the site works the same for every account, and the friend only pastes his own cookie at the end.
 8. Windows .exe, auto-start, install guide; final test on a Windows PC.

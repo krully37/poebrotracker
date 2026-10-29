@@ -100,7 +100,6 @@ GifPlayer *firstFrame;  // decodes first frames for the prepared pages
 uint16_t *bgCanvas;
 uint8_t *liveOv;            // that page's overlay, unpacked
 std::string liveKey, liveOvKey;  // what bgPlayer and liveOv hold
-constexpr size_t kKeepFree = 1024 * 1024;  // PSRAM left for the rest when loading a GIF background
 
 // --- Pages ---------------------------------------------------------------------------------
 
@@ -110,13 +109,6 @@ bool isMovingBackground(const Page &page, storage::FileInfo &f) {
 
 bool liveOpen() { return bgPlayer->isOpen() || video.isOpen(); }
 
-std::shared_ptr<std::vector<uint8_t>> readBackground(const std::string &id, const storage::FileInfo &f) {
-  if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < f.size + kKeepFree) {
-    pclink::log("background %s: no room to load it (%u bytes)", id.c_str(), (unsigned)f.size);
-    return nullptr;
-  }
-  return storage::read(id);
-}
 
 void loadBackground(Prepared &p, const Page &page) {
   storage::FileInfo f;
@@ -132,8 +124,8 @@ void loadBackground(Prepared &p, const Page &page) {
     pclink::log("background %s: cannot decode", page.bgFile.c_str());
   }
   if (hasFile && f.format == "gif") {
-    auto data = readBackground(page.bgFile, f);
-    if (data && firstFrame->open(data, p.bg, nullptr) && firstFrame->advance(millis())) {
+    // Read from flash as it decodes: a GIF background is never loaded whole into PSRAM.
+    if (firstFrame->open(page.bgFile, p.bg, nullptr) && firstFrame->advance(millis())) {
       firstFrame->close();
       p.bgKey = key;
       return;
@@ -203,8 +195,7 @@ bool liveLayer(const Page &page, uint32_t now, compositor::Layer &layer) {
     video.close();
     bool ok;
     if (f.format == "gif") {
-      auto data = readBackground(page.bgFile, f);
-      ok = data && bgPlayer->open(data, bgCanvas, nullptr);
+      ok = bgPlayer->open(page.bgFile, bgCanvas, nullptr);
     } else {
       ok = video.open(page.bgFile, bgCanvas);
     }

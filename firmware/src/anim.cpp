@@ -31,11 +31,12 @@ bool fresh = false;  // a still image (or black) waiting to be drawn once
 
 bool isAnimation(const std::string &id) { return id == "boot" || id.rfind("anim-", 0) == 0; }
 
-std::shared_ptr<std::vector<uint8_t>> load(const std::string &id) {
+// The file preloaded in PSRAM, or nullptr (then it is read from flash as it plays).
+std::shared_ptr<std::vector<uint8_t>> preloaded(const std::string &id) {
   auto it = cache.find(id);
   storage::FileInfo f;
   if (it != cache.end() && storage::info(id, f) && f.crc == it->second.crc) return it->second.data;
-  return storage::read(id);
+  return nullptr;
 }
 
 }  // namespace
@@ -66,7 +67,8 @@ uint32_t bootLength(const std::string &file) {
   storage::FileInfo f;
   if (!storage::info(file, f)) return 0;
   if (f.format != "gif") return kStill;
-  auto bytes = load(file);
+  auto bytes = preloaded(file);
+  if (!bytes) bytes = storage::read(file);  // at power-on, before anything is preloaded
   uint32_t ms = bytes ? GifPlayer::length(*bytes) : 0;
   return ms ? min(kMaxBoot, max(kMinBoot, ms)) : kStill;
 }
@@ -76,11 +78,16 @@ void start(const std::string &file, bool seeThrough) {
   seeThrough_ = seeThrough;
   compositor::fill(canvas_, 0);
   storage::FileInfo f;
-  auto data = file.empty() || !storage::info(file, f) ? nullptr : load(file);
-  if (data && f.format == "gif") {
-    if (!player->open(data, canvas_, seeThrough ? mask_ : nullptr)) pclink::log("animation %s: cannot open", file.c_str());
-  } else if (data && !compositor::decodeJpeg(*data, canvas_)) {
-    pclink::log("animation %s: cannot decode", file.c_str());
+  if (!file.empty() && storage::info(file, f)) {
+    auto data = preloaded(file);
+    if (f.format == "gif") {
+      bool ok = data ? player->open(data, canvas_, seeThrough ? mask_ : nullptr)
+                     : player->open(file, canvas_, seeThrough ? mask_ : nullptr);
+      if (!ok) pclink::log("animation %s: cannot open", file.c_str());
+    } else {
+      if (!data) data = storage::read(file);  // a still image: small
+      if (!data || !compositor::decodeJpeg(*data, canvas_)) pclink::log("animation %s: cannot decode", file.c_str());
+    }
   }
   if (seeThrough && !player->isOpen()) memset(mask_, 0, compositor::kPixels);
   fresh = true;
