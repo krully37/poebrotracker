@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <esp_heap_caps.h>
 #include <miniz.h>
 
 #include <map>
@@ -87,6 +88,7 @@ void inventory(JsonDocument &r) {
   r["height"] = kLandscapeH;
   r["flash_total"] = storage::totalBytes();
   r["flash_free"] = storage::freeBytes();
+  r["psram_free"] = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);  // for debugging; the PC ignores it
   JsonObject ov = r["overlays"].to<JsonObject>();
   {
     State::Lock l;

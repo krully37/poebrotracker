@@ -30,7 +30,7 @@ bool inflateSprite(const uint8_t *z, size_t len, std::vector<uint8_t> &out);
 bool decodeJpeg(const std::vector<uint8_t> &data, uint16_t *bg);
 void fill(uint16_t *bg, uint16_t color);
 
-// A page: its background with its overlay (unpacked, or nullptr) on top.
+// A page: its background (nullptr: black) with its overlay (unpacked, or nullptr) on top.
 struct Layer {
   const uint16_t *bg = nullptr;
   const uint8_t *overlay = nullptr;
@@ -47,7 +47,9 @@ struct Sprite {
 void flatten(const Layer &layer, uint16_t *flat);
 
 struct Scene {
-  const uint16_t *page = nullptr;  // flattened
+  const uint16_t *page = nullptr;  // flattened; nullptr: black
+  // Instead of `page`: a page composited on the way out (one with a GIF background).
+  const Layer *live = nullptr;
   // While sliding: the page coming in (flattened), and how far the pages have moved (0–480 px).
   const uint16_t *incoming = nullptr;
   int shift = 0;

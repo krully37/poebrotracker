@@ -10,6 +10,7 @@
 #include "decor_sprites.h"
 #include "display.h"
 #include "gestures.h"
+#include "gifplayer.h"
 #include "idlecat.h"
 #include "pclink.h"
 #include "state.h"
@@ -53,13 +54,12 @@ struct Prepared {
 };
 Prepared slots[3];
 uint32_t useClock = 0;
-uint8_t *scratchOv;  // an overlay unpacked just long enough to flatten its page
 
-uint16_t *offlineBg;
-uint8_t *offlineOv;
-uint8_t *topRaw;  // the toast, the reset banner or the event's text, unpacked
+uint8_t *topRaw;
 uint16_t *dimmed;  // the page under an over-the-page animation, panel order
-std::string offlineKey, topKey;
+// One unpacked overlay at a time, and what it holds (topKey): the toast, the reset banner, the
+// event's text, the offline screen, or "" for a page overlay unpacked just to flatten its page.
+std::string topKey;
 
 // The PC's latest word, copied from `state` when its version changes.
 uint32_t seenVersion = ~0u;
@@ -91,7 +91,28 @@ struct Slide {
   uint32_t pushUs = 0;  // time spent compositing and pushing
 } slide;
 
+// The page shown, when its background is a GIF: played live, composited each frame (docs/SCOPE.md
+// §8b). Its first frame is what slides and the pages beside it use.
+GifPlayer *bgPlayer;
+GifPlayer *firstFrame;  // decodes first frames for the prepared pages
+uint16_t *bgCanvas;
+uint8_t *liveOv;            // that page's overlay, unpacked
+std::string liveKey, liveOvKey;  // what bgPlayer and liveOv hold
+constexpr size_t kKeepFree = 1024 * 1024;  // PSRAM left for the rest when loading a GIF background
+
 // --- Pages ---------------------------------------------------------------------------------
+
+bool isGifBackground(const Page &page, storage::FileInfo &f) {
+  return !page.bgFile.empty() && storage::info(page.bgFile, f) && f.format == "gif";
+}
+
+std::shared_ptr<std::vector<uint8_t>> readBackground(const std::string &id, const storage::FileInfo &f) {
+  if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < f.size + kKeepFree) {
+    pclink::log("background %s: no room to load it (%u bytes)", id.c_str(), (unsigned)f.size);
+    return nullptr;
+  }
+  return storage::read(id);
+}
 
 void loadBackground(Prepared &p, const Page &page) {
   storage::FileInfo f;
@@ -106,7 +127,17 @@ void loadBackground(Prepared &p, const Page &page) {
     }
     pclink::log("background %s: cannot decode", page.bgFile.c_str());
   }
-  // GIF and video backgrounds come with steps 6c and 6d; until then, the fallback colour.
+  if (hasFile && f.format == "gif") {
+    auto data = readBackground(page.bgFile, f);
+    if (data && firstFrame->open(data, p.bg, nullptr) && firstFrame->advance(millis())) {
+      firstFrame->close();
+      p.bgKey = key;
+      return;
+    }
+    firstFrame->close();
+    pclink::log("background %s: cannot decode", page.bgFile.c_str());
+  }
+  // Video backgrounds come with step 6d; until then, the fallback colour.
   compositor::fill(p.bg, page.bgColor);
   p.bgKey = "#" + std::to_string(page.bgColor);
 }
@@ -132,8 +163,9 @@ Prepared &prepare(const Page &page) {
     compositor::Layer layer;
     layer.bg = slot->bg;
     if (it != overlays.end()) {
-      if (compositor::inflate(it->second.data->data(), it->second.data->size(), scratchOv)) {
-        layer.overlay = scratchOv;
+      topKey = "";  // topRaw is borrowed for this page's overlay
+      if (compositor::inflate(it->second.data->data(), it->second.data->size(), topRaw)) {
+        layer.overlay = topRaw;
       } else {
         pclink::log("overlay %s: cannot unpack", page.id.c_str());
       }
@@ -142,6 +174,49 @@ Prepared &prepare(const Page &page) {
     slot->flatKey = key;
   }
   return *slot;
+}
+
+// The page shown, when its background is a GIF: its frame now, decoded when due, and its overlay.
+// False otherwise (or when the GIF cannot be played: its first frame stays, from the flat page).
+bool liveLayer(const Page &page, uint32_t now, compositor::Layer &layer) {
+  storage::FileInfo f;
+  if (!isGifBackground(page, f)) {
+    bgPlayer->close();
+    liveKey = "";
+    return false;
+  }
+  std::string key = page.id + ":" + page.bgFile + ":" + f.crc;
+  if (key != liveKey) {
+    liveKey = key;
+    auto data = readBackground(page.bgFile, f);
+    if (!data || !bgPlayer->open(data, bgCanvas, nullptr)) {
+      bgPlayer->close();
+      pclink::log("background %s: cannot play", page.bgFile.c_str());
+    }
+  }
+  if (!bgPlayer->isOpen()) return false;
+  bgPlayer->advance(now);
+  auto it = overlays.find(page.id);
+  std::string ovKey = it != overlays.end() ? page.id + ":" + it->second.crc : "";
+  if (ovKey != liveOvKey) {
+    liveOvKey = ovKey;
+    if (it != overlays.end() && !compositor::inflate(it->second.data->data(), it->second.data->size(), liveOv)) {
+      liveOvKey = "";
+    }
+  }
+  layer.bg = bgCanvas;
+  layer.overlay = liveOvKey.empty() ? nullptr : liveOv;
+  return true;
+}
+
+// Keeps the live page's frame as it is now in its flat page, for a slide or an animation over it:
+// the GIF holds still there (docs/SCOPE.md §8b).
+void freezeLive() {
+  if (!bgPlayer->isOpen() || pages.empty() || liveKey.rfind(pages[current].id + ":", 0) != 0) return;
+  compositor::Layer layer;
+  layer.bg = bgCanvas;
+  layer.overlay = liveOvKey.empty() ? nullptr : liveOv;
+  compositor::flatten(layer, prepare(pages[current]).flat);
 }
 
 bool isPrepared(const Page &page) {
@@ -201,6 +276,7 @@ void handle(const gestures::Result &r, uint32_t now) {
       sendEvent("reset", r.action);
       break;
     case gestures::Result::Page: {
+      freezeLive();
       slide.on = true;
       slide.from = current;
       slide.forward = r.step > 0;
@@ -249,15 +325,14 @@ void readTouch(uint32_t now) {
 
 void showOffline(Mode mode) {
   bool waiting = mode == Mode::Waiting;
-  std::string key = waiting ? "waiting" : "disconnected";
-  if (offlineKey != key) {
+  std::string key = waiting ? "#waiting" : "#disconnected";
+  if (topKey != key) {
     const uint8_t *z = waiting ? waiting_start : disconnected_start;
     size_t n = waiting ? waiting_end - waiting_start : disconnected_end - disconnected_start;
-    offlineKey = compositor::inflate(z, n, offlineOv) ? key : "";
+    topKey = compositor::inflate(z, n, topRaw) ? key : "";
   }
-  compositor::Layer layer;
-  layer.bg = offlineBg;
-  layer.overlay = offlineKey == key ? offlineOv : nullptr;
+  compositor::Layer layer;  // on black
+  layer.overlay = topKey == key ? topRaw : nullptr;
   compositor::push(layer);
   display::backlight(kDim);
 }
@@ -302,7 +377,7 @@ void showIdle(uint32_t now) {
   idlecat::step(now);
   Sprite cat = idlecat::sprite();
   Scene scene;
-  scene.page = offlineBg;  // black, in either order
+  scene.page = nullptr;  // black
   scene.sprites = &cat;
   scene.spriteCount = 1;
   compositor::push(scene);
@@ -319,6 +394,7 @@ const uint8_t *topOverlay(const std::string &id) {
 }
 
 Scene pageScene(Sprite *sprites) {
+  freezeLive();
   Scene scene;
   scene.page = prepare(pages[current]).flat;
   scene.sprites = sprites;
@@ -353,6 +429,7 @@ void showAnimation(uint32_t now, bool online) {
 
 void showPage(uint32_t now) {
   Scene scene;
+  compositor::Layer live;
   float t = slide.on ? fminf(1, (float)(now - slide.start) / kSlideMs) : 1;
   if (slide.on && t >= 1) {
     pclink::log("slide: %d frames in %u ms, %u ms a frame pushing", slide.frames, (unsigned)(now - slide.start),
@@ -372,6 +449,7 @@ void showPage(uint32_t now) {
   } else {
     slide.on = false;
     scene.page = cur.flat;
+    if (liveLayer(pages[current], now, live)) scene.live = &live;
   }
   // Over the pages: the reset banner while holding (its bar filling), else the toast.
   float progress;
@@ -402,10 +480,10 @@ void begin() {
     s.bg = static_cast<uint16_t *>(heap_caps_malloc(compositor::kPixels * 2, MALLOC_CAP_SPIRAM));
     s.flat = static_cast<uint16_t *>(heap_caps_malloc(compositor::kPixels * 2, MALLOC_CAP_SPIRAM));
   }
-  scratchOv = compositor::allocOverlay();
-  offlineBg = static_cast<uint16_t *>(heap_caps_malloc(compositor::kPixels * 2, MALLOC_CAP_SPIRAM));
-  compositor::fill(offlineBg, 0);
-  offlineOv = compositor::allocOverlay();
+  bgCanvas = static_cast<uint16_t *>(heap_caps_malloc(compositor::kPixels * 2, MALLOC_CAP_SPIRAM));
+  liveOv = compositor::allocOverlay();
+  bgPlayer = new GifPlayer();
+  firstFrame = new GifPlayer();
   topRaw = compositor::allocOverlay();
   dimmed = static_cast<uint16_t *>(heap_caps_malloc(compositor::kPixels * 2, MALLOC_CAP_SPIRAM));
   anim::begin();
@@ -487,7 +565,7 @@ void tick() {
   float progress;
   std::string action;
   bool holding = tracker.hold(now, progress, action);
-  if (dirty || shown != Mode::Page || slide.on || holding || holdShown) {
+  if (dirty || shown != Mode::Page || slide.on || holding || holdShown || bgPlayer->due(now)) {
     showPage(now);
     shown = Mode::Page;
     dirty = false;

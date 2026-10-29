@@ -198,6 +198,7 @@ Decided 2026-10-29.
     - The idle cat moves at 30 fps, turned with bilinear filtering.
     - **6c-1 done 2026-10-29:** level-up (full screen, twice), death (over the dimmed page) and the boot cat (at power-on, from flash) checked on the screen. The death cat is now centred.
     - **6c-2 done 2026-10-29:** the idle cat bounces and turns on the screen, and a touch brings the pages back (EVENT wake). The turns are not perfectly smooth yet (whole degrees, the sprite turned again for each one); good enough for now (owner).
+    - **6c-3 done 2026-10-29:** a GIF page background plays smoothly behind the overlay on the page shown, holds still on its current frame during a slide or an animation over the page, and the long-press banner shows over it. Pages beside it use its first frame. A background GIF is loaded into PSRAM only when 1 MB stays free; otherwise its first frame shows, still. With everything loaded (three animations, a GIF background) 1.7 MB of PSRAM is left; HELLO's answer carries `psram_free` for that.
   - **6d:** video backgrounds; the MJPEG file format is proposed then.
   - The framing is also unit-tested on the PC (`pio test -e native`).
 - **Flash:** one 3 MB app partition, no over-the-air updates (the owner flashes by USB); LittleFS gets the rest, about 12.9 MB.

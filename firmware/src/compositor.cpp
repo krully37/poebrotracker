@@ -37,7 +37,8 @@ const uint16_t *colourPlane(const uint8_t *raw) { return reinterpret_cast<const 
 
 // `count` landscape pixels of a page from index s, down a panel column (d steps by W).
 void composeRun(uint16_t *d, const Layer &L, size_t s, int count) {
-  const uint16_t *b = L.bg + s;
+  static const uint16_t kBlack[16] = {};  // runs are at most a strip's 16 rows
+  const uint16_t *b = L.bg ? L.bg + s : kBlack;
   if (L.overlay) {
     const uint8_t *alpha = L.overlay + 7;
     const uint16_t *c = colourPlane(L.overlay) + s;
@@ -102,13 +103,19 @@ void layerStrip(uint16_t *dst, int y0, int rows, void *ctx) {
 }
 
 void copyRows(uint16_t *dst, const uint16_t *flat, int from, int count) {
-  memcpy(dst, flat + (size_t)from * W, (size_t)count * W * 2);
+  if (flat) {
+    memcpy(dst, flat + (size_t)from * W, (size_t)count * W * 2);
+  } else {
+    memset(dst, 0, (size_t)count * W * 2);
+  }
 }
 
 void sceneStrip(uint16_t *dst, int y0, int rows, void *ctx) {
   const Scene &S = *static_cast<const Scene *>(ctx);
   int y1 = y0 + rows;
-  if (!S.shift || !S.incoming) {
+  if (S.live) {
+    composeStrip(dst, y0, rows, *S.live);
+  } else if (!S.shift || !S.incoming) {
     copyRows(dst, S.page, y0, rows);
   } else if (S.forward) {
     // Panel row r (landscape column) shows the old page's row r + shift, then the new page's.
