@@ -46,6 +46,13 @@ ROUTES = {
         {"tabId": "b2", "name": "Sell", "values": [None, 9000], "last": 9000},  # rares: left out
         {"tabId": "c3", "name": "My Uniques", "values": [None, 200], "last": 200},
     ]},
+    "/api/items": {"items": [
+        {"tabId": "a1", "name": "Divine Orb", "rarity": "Currency", "stackSize": 10, "chaos": 2000, "status": "priced"},
+        {"tabId": "a1", "name": "Some Scarab", "rarity": "Normal", "stackSize": 5, "chaos": 100, "status": "priced"},
+        {"tabId": "a1", "name": "Doom Loop", "rarity": "Rare", "chaos": 400, "status": "priced"},  # rare: out
+        {"tabId": "a1", "name": "Headhunter", "rarity": "Unique", "chaos": 9000, "status": "priced"},  # not a unique tab
+        {"tabId": "a1", "name": "Odd Jewel", "rarity": "Normal", "chaos": None, "status": "error"},  # not priced
+    ]},
 }
 
 
@@ -58,6 +65,19 @@ def test_reads_tabs_in_divines_with_its_own_divine_price():
     assert snap.total == pytest.approx(18.0) and snap.div_price == 200 and snap.league == "Allflame"
     assert ("/api/wealth/families", {"league": "Allflame", "hours": 24}) in fake.asked
     assert pp.fetch("Allflame", session=fake, unique_tabs="nothing, here").total == pytest.approx(17.0)
+    # Items follow the same rule: bulk anywhere (one /api/items per tab, the fake answers the same
+    # rows for each), uniques only in the uniques tab.
+    names = sorted({i.name for i in snap.items})
+    assert names == ["Divine Orb", "Headhunter", "Some Scarab"]
+    assert [i.tab for i in snap.items if i.name == "Headhunter"] == ["My Uniques"]
+    assert next(i for i in snap.items if i.name == "Divine Orb").value == pytest.approx(10.0)
+
+
+def test_equipment_never_counts():
+    assert not pp.counts({"tabId": "character-x", "rarity": "Currency", "chaos": 5, "status": "priced"}, False)
+    # /api/items also lists what has left the tab, for PoE Pricer's own interface
+    assert not pp.counts({"tabId": "a1", "rarity": "Currency", "chaos": 5, "status": "priced", "gone": 1}, False)
+    assert pp.counts({"tabId": "a1", "rarity": "Currency", "chaos": 5, "status": "priced", "gone": 0}, False)
 
 
 def test_unique_tabs_are_found_by_name():

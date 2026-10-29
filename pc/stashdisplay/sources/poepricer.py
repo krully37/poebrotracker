@@ -15,7 +15,7 @@ import time
 
 import requests
 
-from .base import Snapshot, SourceError, Tab
+from .base import Item, Snapshot, SourceError, Tab
 
 DEFAULT_URL = "http://127.0.0.1:5175"
 TIMEOUT = 5
@@ -52,11 +52,24 @@ def is_unique_tab(name: str, words: str) -> bool:
     return any(w.strip().lower() in name.lower() for w in words.split(",") if w.strip())
 
 
+# Items that count, like the total: priced bulk items anywhere, uniques only in unique tabs. Rares,
+# magic items and gems are too hard to price; the character's equipment is not stash wealth.
+_NOT_BULK = {"Rare", "Magic", "Gem", "Unique"}
+
+
+def counts(item: dict, in_unique_tab: bool) -> bool:
+    # /api/items also lists what has left the tab ("gone"), for its own interface.
+    if item.get("gone") or item.get("status") != "priced" or not item.get("chaos") or item.get("tabId", "").startswith("character"):
+        return False
+    return item.get("rarity") == "Unique" if in_unique_tab else item.get("rarity") not in _NOT_BULK
+
+
 def fetch(league: str, base: str = DEFAULT_URL, session=None, now: float | None = None,
           unique_tabs: str = "unique") -> Snapshot:
     """The stash as PoE Pricer last read it, in divines: one entry per bulk family, plus each tab
-    of uniques. PoE Pricer gives no tab types, so unique tabs are found by name. No items: its
-    item list is per tab and is left for later."""
+    of uniques. PoE Pricer gives no tab types, so unique tabs are found by name. The items (for the
+    most valuable ones) follow the same rule, one request per tab: it is a local app, and these
+    reads cost it no GGG quota."""
     now = time.time() if now is None else now
     rate = divine_price(league, base, session)
     if not rate:
@@ -64,7 +77,12 @@ def fetch(league: str, base: str = DEFAULT_URL, session=None, now: float | None 
     params = {"league": league, "hours": 24}
     families = _get(base, "/api/wealth/families", params, session).get("series", [])
     tabs = [Tab(s.get("type", "?"), float(s.get("last") or 0) / rate) for s in families]
+    items = []
     for s in _get(base, "/api/wealth", params, session).get("series", []):
-        if is_unique_tab(s.get("name") or "", unique_tabs):
+        unique = is_unique_tab(s.get("name") or "", unique_tabs)
+        if unique:
             tabs.append(Tab(s["name"], float(s.get("last") or 0) / rate))
-    return Snapshot(total=sum(t.value for t in tabs), time=now, tabs=tabs, div_price=rate, league=league)
+        rows = _get(base, "/api/items", {"league": league, "tabId": s.get("tabId", "")}, session).get("items", [])
+        items += [Item(i.get("name", "?"), int(i.get("stackSize") or 1), float(i["chaos"]) / rate, s.get("name", ""))
+                  for i in rows if counts(i, unique)]
+    return Snapshot(total=sum(t.value for t in tabs), time=now, items=items, tabs=tabs, div_price=rate, league=league)
