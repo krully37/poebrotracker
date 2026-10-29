@@ -95,6 +95,9 @@ def parse(text: str, now: float | None = None) -> Snapshot:
                       and p.get("name") == "Divine Orb" and p.get("league") == league), None)
     if not div_price:
         raise SourceError(CHANGED, f"no Divine Orb price for {league!r}")
+    # Like the site, stacks worth less than the account's own threshold do not count (it was 10 chaos
+    # for the owner: 38.6 divines shown, against 41.2 with every stack).
+    threshold = float(user.get("priceThresholdPerStack") or 0)
     items = []
     for tab in tabs:  # each tab carries its own items
         for row in tab.get("items") or []:
@@ -103,6 +106,8 @@ def parse(text: str, now: float | None = None) -> Snapshot:
                 continue
             quantity = int(row.get("quantity") or 0)
             chaos = float(price.get("value") or 0) * quantity  # the page's price is per unit
+            if chaos < threshold:
+                continue
             items.append(Item(price.get("name", "?"), quantity, chaos / div_price, tab.get("name", "")))
     return Snapshot(total=sum(i.value for i in items), time=_date(user.get("lastSynced")) or now,
                     items=items, div_price=float(div_price), league=league)

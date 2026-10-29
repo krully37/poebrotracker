@@ -23,13 +23,15 @@ def data(league="Allflame"):
     return {
         "user": {
             "username": "Someone#1234", "accessToken": "0123456789abcdef0123456789abcdef01234567",
-            "preferredLeague": league, "lastSynced": "$D2026-10-29T16:26:23.000Z",
+            "preferredLeague": league, "lastSynced": "$D2026-10-29T16:26:23.000Z", "priceThresholdPerStack": 10,
             # Each tab carries its own items, as on the real page.
             "tabs": [
                 {"id": 11, "name": "Currency", "tabValues": [{"value": 300, "createdAt": "$D2026-10-29T16:00:00.000Z"}],
                  "items": [{"quantity": 1500, "tabID": 11, "price": {"name": "Chaos Orb", "value": 0.2, "category": "currency"}}]},
                 {"id": 12, "name": "Maps", "tabValues": [{"value": 9, "createdAt": "$D2026-10-29T16:00:00.000Z"}],
-                 "items": [{"quantity": 9, "tabID": 12, "price": {"name": "Map (Tier 12)", "value": 1, "category": "maps"}}]},
+                 "items": [{"quantity": 9, "tabID": 12, "price": {"name": "Map (Tier 12)", "value": 1, "category": "maps"}},
+                           # 4 chaos for the stack: under the account's 10-chaos threshold, not counted
+                           {"quantity": 2, "tabID": 12, "price": {"name": "Map (Tier 1)", "value": 2, "category": "maps"}}]},
             ],
         },
         "priceMap": [
