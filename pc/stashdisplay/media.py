@@ -3,25 +3,29 @@
 Each upload gets a random id and its own folder:
     media/<id>/source.<ext>   the file as uploaded
     media/<id>/still.png      first frame, full size (cropped at render time)
+    media/<id>/frames.bin     a video's frames, JPEGs each after its length (u32 LE)
     media/<id>/meta.json      kind, original name, size, frame count...
 
-Video stills come from the browser (it can decode the video; Python cannot
-without ffmpeg). Converting media for the screen comes with the firmware step.
+A video's still and frames come from the browser (it can decode the video; Python cannot
+without ffmpeg). link/content.py converts media for the screen.
 """
 
 import io
 import json
 import secrets
 import shutil
+import struct
 from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from .link.protocol import VIDEO_FPS, VIDEO_MAX_SECONDS
 from .render.theme import HEIGHT, WIDTH
 
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
 MAX_VIDEO_BYTES = 300 * 1024 * 1024
+JPEG_START = bytes([0xFF, 0xD8])
 
 
 class MediaError(ValueError):
@@ -90,6 +94,41 @@ class MediaStore:
         meta.update(needs_still=False, width=still.width, height=still.height)
         self._write_meta(meta)
         return meta
+
+    def set_frames(self, media_id: str, data: bytes) -> dict:
+        """Store a video's frames, decoded by the browser: each a JPEG after its length (u32 LE),
+        at protocol.VIDEO_FPS, at most protocol.VIDEO_MAX_SECONDS of them."""
+        meta = self.get(media_id)
+        frames, at = [], 0
+        while at + 4 <= len(data) and len(frames) < VIDEO_FPS * VIDEO_MAX_SECONDS:
+            (n,) = struct.unpack_from("<I", data, at)
+            frame = data[at + 4:at + 4 + n]
+            if len(frame) != n or not frame.startswith(JPEG_START):
+                raise MediaError("not a JPEG frame")
+            frames.append(frame)
+            at += 4 + n
+        if not frames:
+            raise MediaError("no frames")
+        (self._dir(media_id) / "frames.bin").write_bytes(b"".join(struct.pack("<I", len(f)) + f for f in frames))
+        meta.update(video_frames=len(frames))
+        self._write_meta(meta)
+        return meta
+
+    def video_frames(self, media_id: str) -> list[bytes]:
+        """A video's frames (JPEGs at full size), or [] when the browser has not sent them."""
+        path = self._dir(media_id) / "frames.bin"
+        if not path.exists():
+            return []
+        data, frames, at = path.read_bytes(), [], 0
+        while at + 4 <= len(data):
+            (n,) = struct.unpack_from("<I", data, at)
+            frames.append(data[at + 4:at + 4 + n])
+            at += 4 + n
+        return frames
+
+    def frames_path(self, media_id: str) -> Path | None:
+        path = self._dir(media_id) / "frames.bin"
+        return path if path.exists() else None
 
     def get(self, media_id: str) -> dict:
         path = self._dir(media_id) / "meta.json"

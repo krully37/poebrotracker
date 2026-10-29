@@ -212,6 +212,13 @@ def create_app(app: App) -> Flask:
         except MediaError as e:
             return jsonify({"error": str(e)}), 400
 
+    @web.post("/api/media/<media_id>/frames")
+    def media_frames(media_id: str):
+        try:
+            return jsonify(app.media.set_frames(media_id, request.get_data()))
+        except MediaError as e:
+            return jsonify({"error": str(e)}), 400
+
     @web.get("/api/media/<media_id>/thumb")
     def media_thumb(media_id: str):
         try:

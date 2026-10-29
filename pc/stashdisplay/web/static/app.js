@@ -289,7 +289,16 @@ document.addEventListener("alpine:init", () => {
         form.append("file", file);
         let meta = await api("/api/media", { method: "POST", body: form }).then((r) => r.json());
         if (meta.error) throw new Error(meta.error);
-        if (meta.needs_still) meta = await this.extractVideoStill(file, meta.id);
+        if (meta.needs_still) {
+          meta = await this.extractVideoStill(file, meta.id);
+          try {
+            const framed = await this.extractVideoFrames(file, meta.id);
+            if (framed.error) throw new Error(framed.error);
+            meta = framed;
+          } catch (e) {  // the still frame is there: the video shows it, without moving
+            this.notify(this.t("bg.upload.error") + " " + e.message);
+          }
+        }
         this.media = [meta, ...this.media.filter((m) => m.id !== meta.id)];
         use(meta);
       } catch (e) {
@@ -322,6 +331,46 @@ document.addEventListener("alpine:init", () => {
         };
         video.onerror = () => reject(new Error(this.t("bg.video.unreadable")));
       });
+    },
+
+    // And its frames for the screen: the first 10 s at 12 fps (docs/SCOPE.md §5), as JPEGs each
+    // after its length. The PC fits them to the screen and packs them for it.
+    async extractVideoFrames(file, id) {
+      const FPS = 12, MAX_SECONDS = 10, MAX_SIDE = 960;
+      const video = document.createElement("video");
+      video.muted = true;
+      video.preload = "auto";
+      video.src = URL.createObjectURL(file);
+      const seek = (t) => new Promise((resolve, reject) => {
+        video.onseeked = resolve;
+        video.onerror = () => reject(new Error(this.t("bg.video.unreadable")));
+        video.currentTime = t;
+      });
+      try {
+        await new Promise((resolve, reject) => {
+          video.onloadeddata = resolve;
+          video.onerror = () => reject(new Error(this.t("bg.video.unreadable")));
+        });
+        const count = Math.max(1, Math.floor(Math.min(video.duration || 0, MAX_SECONDS) * FPS));
+        const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const ctx = canvas.getContext("2d");
+        const parts = [];
+        for (let i = 0; i < count; i++) {
+          await seek(i / FPS);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+          const size = new DataView(new ArrayBuffer(4));
+          size.setUint32(0, blob.size, true);
+          parts.push(size.buffer, blob);
+        }
+        const res = await api(`/api/media/${id}/frames`, { method: "POST", body: new Blob(parts) });
+        return await res.json();
+      } finally {
+        URL.revokeObjectURL(video.src);
+      }
     },
 
     async deleteMedia(m) {

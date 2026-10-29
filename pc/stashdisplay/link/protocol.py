@@ -230,6 +230,38 @@ def decode_overlay(blob: bytes) -> Image.Image:
     return Image.merge("RGBA", (r, g, b, a))
 
 
+# --- Video backgrounds: MJ1 -------------------------------------------------------------------
+#
+# "MJ1" | frame_ms u16 | count u16 | (count + 1) offsets u32, from the start of the file | JPEGs.
+# The screen reads one frame at a time from flash, so it needs to find each one.
+
+MJPEG_MAGIC = b"MJ1"
+VIDEO_FPS = 12
+VIDEO_MAX_SECONDS = 10
+VIDEO_JPEG_QUALITY = 70
+
+
+def encode_mjpeg(frames: list[bytes], frame_ms: int) -> bytes:
+    head = len(MJPEG_MAGIC) + 4 + 4 * (len(frames) + 1)
+    offsets, at = [], head
+    for frame in frames:
+        offsets.append(at)
+        at += len(frame)
+    offsets.append(at)
+    return MJPEG_MAGIC + struct.pack(f"<HH{len(offsets)}I", frame_ms, len(frames), *offsets) + b"".join(frames)
+
+
+def decode_mjpeg(blob: bytes) -> tuple[int, list[bytes]]:
+    """(frame_ms, the JPEG frames), as the screen reads them."""
+    if blob[:3] != MJPEG_MAGIC or len(blob) < 7:
+        raise ProtocolError("not a video")
+    frame_ms, count = struct.unpack_from("<HH", blob, 3)
+    offsets = struct.unpack_from(f"<{count + 1}I", blob, 7)
+    if offsets[-1] != len(blob) or any(b < a for a, b in zip(offsets, offsets[1:])):
+        raise ProtocolError("bad video offsets")
+    return frame_ms, [blob[a:b] for a, b in zip(offsets, offsets[1:])]
+
+
 def crc_hex(data: bytes) -> str:
     return f"{zlib.crc32(data):08x}"
 

@@ -111,6 +111,34 @@ bool remove(const std::string &id) {
   return LittleFS.remove(path(id).c_str());
 }
 
+Reader::~Reader() { close(); }
+
+bool Reader::open(const std::string &id) {
+  close();
+  File f;
+  {
+    Lock l;
+    if (!files.count(id)) return false;
+    f = LittleFS.open(path(id).c_str(), "r");
+  }
+  if (!f) return false;
+  file_ = new File(f);
+  return true;
+}
+
+void Reader::close() {
+  auto *f = static_cast<File *>(file_);
+  if (!f) return;
+  f->close();
+  delete f;
+  file_ = nullptr;
+}
+
+bool Reader::read(uint32_t offset, uint8_t *buf, size_t len) {
+  auto *f = static_cast<File *>(file_);
+  return f && f->seek(offset) && f->read(buf, len) == len;
+}
+
 Writer::~Writer() { abort(); }
 
 bool Writer::open(uint16_t xfer, const std::string &id, uint32_t size, const std::string &crc,

@@ -451,8 +451,11 @@ def _holds(zone: dict | None) -> bool:
 
 
 def _decode_frames(data: bytes) -> list[tuple[Image.Image, int]]:
-    """Every frame of a JPEG or GIF file, with its duration in ms, sized for the screen.
+    """Every frame of a JPEG, GIF or MJ1 file, with its duration in ms, sized for the screen.
     Frames with see-through pixels stay RGBA."""
+    if data[:3] == p.MJPEG_MAGIC:
+        frame_ms, jpegs = p.decode_mjpeg(data)
+        return [(_decode_frames(j)[0][0], frame_ms) for j in jpegs]
     with Image.open(io.BytesIO(data)) as im:
         frames = []
         for i in range(getattr(im, "n_frames", 1)):

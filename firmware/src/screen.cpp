@@ -16,6 +16,7 @@
 #include "state.h"
 #include "storage.h"
 #include "touch.h"
+#include "videoplayer.h"
 
 #define EMBEDDED(name, file)                                                   \
   extern const uint8_t name##_start[] asm("_binary_assets_" file "_start"); \
@@ -91,9 +92,10 @@ struct Slide {
   uint32_t pushUs = 0;  // time spent compositing and pushing
 } slide;
 
-// The page shown, when its background is a GIF: played live, composited each frame (docs/SCOPE.md
-// §8b). Its first frame is what slides and the pages beside it use.
+// The page shown, when its background is a GIF or a video: played live, composited each frame
+// (docs/SCOPE.md §8b). Its first frame is what slides and the pages beside it use.
 GifPlayer *bgPlayer;
+VideoPlayer video;
 GifPlayer *firstFrame;  // decodes first frames for the prepared pages
 uint16_t *bgCanvas;
 uint8_t *liveOv;            // that page's overlay, unpacked
@@ -102,9 +104,11 @@ constexpr size_t kKeepFree = 1024 * 1024;  // PSRAM left for the rest when loadi
 
 // --- Pages ---------------------------------------------------------------------------------
 
-bool isGifBackground(const Page &page, storage::FileInfo &f) {
-  return !page.bgFile.empty() && storage::info(page.bgFile, f) && f.format == "gif";
+bool isMovingBackground(const Page &page, storage::FileInfo &f) {
+  return !page.bgFile.empty() && storage::info(page.bgFile, f) && (f.format == "gif" || f.format == "mjpeg");
 }
+
+bool liveOpen() { return bgPlayer->isOpen() || video.isOpen(); }
 
 std::shared_ptr<std::vector<uint8_t>> readBackground(const std::string &id, const storage::FileInfo &f) {
   if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < f.size + kKeepFree) {
@@ -137,7 +141,13 @@ void loadBackground(Prepared &p, const Page &page) {
     firstFrame->close();
     pclink::log("background %s: cannot decode", page.bgFile.c_str());
   }
-  // Video backgrounds come with step 6d; until then, the fallback colour.
+  if (hasFile && f.format == "mjpeg") {
+    if (VideoPlayer::firstFrame(page.bgFile, p.bg)) {
+      p.bgKey = key;
+      return;
+    }
+    pclink::log("background %s: cannot decode", page.bgFile.c_str());
+  }
   compositor::fill(p.bg, page.bgColor);
   p.bgKey = "#" + std::to_string(page.bgColor);
 }
@@ -180,22 +190,33 @@ Prepared &prepare(const Page &page) {
 // False otherwise (or when the GIF cannot be played: its first frame stays, from the flat page).
 bool liveLayer(const Page &page, uint32_t now, compositor::Layer &layer) {
   storage::FileInfo f;
-  if (!isGifBackground(page, f)) {
+  if (!isMovingBackground(page, f)) {
     bgPlayer->close();
+    video.close();
     liveKey = "";
     return false;
   }
   std::string key = page.id + ":" + page.bgFile + ":" + f.crc;
   if (key != liveKey) {
     liveKey = key;
-    auto data = readBackground(page.bgFile, f);
-    if (!data || !bgPlayer->open(data, bgCanvas, nullptr)) {
-      bgPlayer->close();
-      pclink::log("background %s: cannot play", page.bgFile.c_str());
+    bgPlayer->close();
+    video.close();
+    bool ok;
+    if (f.format == "gif") {
+      auto data = readBackground(page.bgFile, f);
+      ok = data && bgPlayer->open(data, bgCanvas, nullptr);
+    } else {
+      ok = video.open(page.bgFile, bgCanvas);
     }
+    if (!ok) pclink::log("background %s: cannot play", page.bgFile.c_str());
   }
-  if (!bgPlayer->isOpen()) return false;
-  bgPlayer->advance(now);
+  if (bgPlayer->isOpen()) {
+    bgPlayer->advance(now);
+  } else if (video.isOpen()) {
+    video.advance(now);
+  } else {
+    return false;
+  }
   auto it = overlays.find(page.id);
   std::string ovKey = it != overlays.end() ? page.id + ":" + it->second.crc : "";
   if (ovKey != liveOvKey) {
@@ -212,7 +233,7 @@ bool liveLayer(const Page &page, uint32_t now, compositor::Layer &layer) {
 // Keeps the live page's frame as it is now in its flat page, for a slide or an animation over it:
 // the GIF holds still there (docs/SCOPE.md §8b).
 void freezeLive() {
-  if (!bgPlayer->isOpen() || pages.empty() || liveKey.rfind(pages[current].id + ":", 0) != 0) return;
+  if (!liveOpen() || pages.empty() || liveKey.rfind(pages[current].id + ":", 0) != 0) return;
   compositor::Layer layer;
   layer.bg = bgCanvas;
   layer.overlay = liveOvKey.empty() ? nullptr : liveOv;
@@ -565,7 +586,7 @@ void tick() {
   float progress;
   std::string action;
   bool holding = tracker.hold(now, progress, action);
-  if (dirty || shown != Mode::Page || slide.on || holding || holdShown || bgPlayer->due(now)) {
+  if (dirty || shown != Mode::Page || slide.on || holding || holdShown || bgPlayer->due(now) || video.due(now)) {
     showPage(now);
     shown = Mode::Page;
     dirty = false;

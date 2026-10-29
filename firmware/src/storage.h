@@ -27,6 +27,18 @@ bool info(const std::string &id, FileInfo &out);
 std::shared_ptr<std::vector<uint8_t>> read(const std::string &id);
 bool remove(const std::string &id);
 
+// Reads parts of a file, for what is too big to load whole (video backgrounds).
+class Reader {
+ public:
+  ~Reader();
+  bool open(const std::string &id);
+  void close();
+  bool read(uint32_t offset, uint8_t *buf, size_t len);
+
+ private:
+  void *file_ = nullptr;
+};
+
 // One file arriving in chunks; it replaces any file of the same id only once it is complete
 // and its CRC matches.
 class Writer {

@@ -133,10 +133,13 @@ Decided 2026-10-27.
 
 ## 5. Backgrounds and media
 
-- Formats: **still image, GIF, video** (video is converted to MJPEG on the PC with ffmpeg).
+- Formats: **still image, GIF, video**. A video becomes an MJPEG file of our own (`mjpeg`, docs/PROTOCOL.md), decided 2026-10-29:
+  - **No ffmpeg.** The settings page's browser decodes the video (as it already does for its still frame), steps through it at **12 fps** and sends the frames to the PC app, which fits each one to the screen (cover or contain, like images) at **JPEG quality 70**, about 20 kB a frame.
+  - **At most 10 s**, looped: about 2.4 MB each. A longer video is cut.
+  - The screen **reads each frame from flash** as it plays (a video does not fit in the free PSRAM), on the page shown only, like GIF backgrounds.
+  - Videos uploaded before this keep showing their first frame until uploaded again.
 - **Every GIF sent to the screen is re-encoded by `pc/stashdisplay/link/gif.py`** (decided 2026-10-28): one 255-colour palette for the whole GIF, no dithering, and pixels that did not change since the previous frame stored as transparent. That is lossless after the palette step and keeps a mostly still animation about 5× smaller than storing every frame in full (the level-up GIF: 3.5 MB → 0.7 MB). It applies to backgrounds, event animations and the start animation alike. Phone-camera noise is not frozen here (that would be lossy); `pc/tools/anim_from_video.py` does it for the built-in animations.
 - Stored in the screen's flash (a ~10–12 MB filesystem partition, out of 16 MB). The settings page shows how much space is used and refuses uploads that don't fit. That's roughly 20–40 s of 480×320 video in total.
-- **[PROPOSED]** Get ffmpeg through `imageio-ffmpeg`, which downloads it on first use, instead of bundling it (keeps the .exe small). Bundling is the alternative if your friend's PC can't download it.
 
 ## 5b. Game events (game start, level-up, death)
 
@@ -199,7 +202,7 @@ Decided 2026-10-29.
     - **6c-1 done 2026-10-29:** level-up (full screen, twice), death (over the dimmed page) and the boot cat (at power-on, from flash) checked on the screen. The death cat is now centred.
     - **6c-2 done 2026-10-29:** the idle cat bounces and turns on the screen, and a touch brings the pages back (EVENT wake). The turns are not perfectly smooth yet (whole degrees, the sprite turned again for each one); good enough for now (owner).
     - **6c-3 done 2026-10-29:** a GIF page background plays smoothly behind the overlay on the page shown, holds still on its current frame during a slide or an animation over the page, and the long-press banner shows over it. Pages beside it use its first frame. A background GIF is loaded into PSRAM only when 1 MB stays free; otherwise its first frame shows, still. With everything loaded (three animations, a GIF background) 1.7 MB of PSRAM is left; HELLO's answer carries `psram_free` for that.
-  - **6d:** video backgrounds; the MJPEG file format is proposed then.
+  - **6d:** video backgrounds (§5). **Done 2026-10-29:** a phone video uploaded in the settings page plays on the screen behind the page and holds still during slides. Per frame: 3 ms to read it from flash (about 6.7 MB/s), 37 ms to decode it.
   - The framing is also unit-tested on the PC (`pio test -e native`).
 - **Flash:** one 3 MB app partition, no over-the-air updates (the owner flashes by USB); LittleFS gets the rest, about 12.9 MB.
 - **Two cores:** core 0 runs the USB link (read, ACK, write to flash); core 1 runs the display (touch, compositing, animations). Overlays stay compressed in PSRAM; the current page and its two neighbours are kept unpacked (~1.2 MB), so a swipe starts at once.

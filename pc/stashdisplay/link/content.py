@@ -56,13 +56,17 @@ class ContentBuilder:
         still = self.media.still_path(bg.get("value") or "")
         if source is None:
             return {"color": BACKGROUND}
-        key = f"{bg['value']}|{bg['fit']}|{bg['x']}|{bg['y']}|{source.stat().st_mtime}"
+        frames_path = self.media.frames_path(bg["value"]) if bg["kind"] == "video" else None
+        frames_mtime = frames_path.stat().st_mtime if frames_path else 0
+        key = f"{bg['value']}|{bg['fit']}|{bg['x']}|{bg['y']}|{source.stat().st_mtime}|{frames_mtime}"
         file_id = "bg-" + hashlib.sha1(key.encode()).hexdigest()[:12]
         if file_id not in self.files:
             if bg["kind"] == "gif":
                 self.files[file_id] = FileContent(gif_for_screen(source, bg), "gif")
+            elif frames_path is not None:
+                self.files[file_id] = FileContent(mjpeg_for_screen(self.media.video_frames(bg["value"]), bg), "mjpeg")
             elif still is not None:
-                # Videos send their first frame for now; MJPEG comes with the firmware media step.
+                # A video uploaded before the browser sent its frames: its first frame, still.
                 self.files[file_id] = FileContent(jpeg_for_screen(still, bg), "jpeg")
             else:
                 return {"color": BACKGROUND}
@@ -126,6 +130,18 @@ def jpeg_for_screen(path: Path, bg: dict) -> bytes:
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=JPEG_QUALITY, optimize=True)
     return buf.getvalue()
+
+
+def mjpeg_for_screen(frames: list[bytes], bg: dict) -> bytes:
+    """A video background: each frame fitted to the screen, in the MJ1 format (docs/PROTOCOL.md)."""
+    out = []
+    for data in frames:
+        with Image.open(io.BytesIO(data)) as im:
+            img = compose_background(im, bg["fit"], bg["x"], bg["y"])
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=p.VIDEO_JPEG_QUALITY)  # baseline: what the screen decodes
+        out.append(buf.getvalue())
+    return p.encode_mjpeg(out, round(1000 / p.VIDEO_FPS))
 
 
 def gif_for_screen(path: Path, bg: dict) -> bytes:
