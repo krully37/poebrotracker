@@ -19,6 +19,12 @@ class UsbLink : public Print {
   // Gives up after about 50 ms without room, when the PC is not reading (port closed).
   size_t write(const uint8_t *buf, size_t len) override;
   void flush() override;
+
+  // Lets waitForData() sleep until a USB packet arrives; call once from the reading task.
+  bool beginWaiting();
+  // Sleeps until something has arrived or timeoutMs has passed. No busy loop, no lost bytes:
+  // the interrupt only wakes the task, the FIFO is still read by read().
+  void waitForData(uint32_t timeoutMs);
 };
 
 extern UsbLink usb;

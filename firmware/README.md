@@ -14,8 +14,28 @@ On Windows the commands are in `~/.platformio/penv/Scripts/`. The board shows up
 | Path | Role |
 |---|---|
 | `lib/board/` | Board drivers: pins, panel (DMA pixel push), touch, USB serial |
+| `lib/protocol/` | The PC ↔ screen framing, plain C++ (tested on the PC) |
+| `src/` | The screen firmware (env `jc3248w535`, the default): `pclink` (USB link task, core 0), `screen` and `compositor` (core 1), `storage` (LittleFS), `state` (shared between the two) |
 | `src/bench/` | Step 5 hardware bench (env `bench`) |
-| `src/` (rest) | The screen firmware, step 6 (env `jc3248w535`) |
+| `assets/` | Offline screens baked into the firmware, made by `pc/tools/firmware_assets.py` |
+
+## Firmware
+
+```bash
+cd firmware && pio run -t upload
+```
+
+Files sent by the PC live in a LittleFS partition (`partitions.csv`), which uploading new firmware leaves alone.
+
+## Tests
+
+The framing tests run on the PC:
+
+```bash
+cd firmware && pio test -e native
+```
+
+They need a C++ compiler on PATH. The Mac has one. On Windows, install PlatformIO's MinGW once (`pio pkg install -g -t platformio/toolchain-gccmingw32`), then put `~/.platformio/packages/toolchain-gccmingw32/bin` first on PATH for the command.
 
 ## Bench (step 5)
 
@@ -32,4 +52,4 @@ cd firmware && pio run -e bench -t upload
 cd pc && .venv/bin/python tools/usb_bench.py PORT
 ```
 
-Closing the serial port resets the board.
+Closing the serial port with a plain close resets the board; the PC app avoids it (`pc/stashdisplay/link/transport.py`).

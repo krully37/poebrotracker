@@ -51,6 +51,10 @@ class SerialPort:
 
     def close(self) -> None:
         try:
+            # The ESP32-S3's native USB resets the board when DTR drops while RTS is still up,
+            # which a plain close does. RTS first, then DTR, leaves the screen running.
+            self.serial.rts = False
+            self.serial.dtr = False
             self.serial.close()
         except Exception:
             pass

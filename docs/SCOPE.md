@@ -177,6 +177,21 @@ Decided 2026-10-27.
 | Firmware | Arduino core 3.x + Arduino_GFX (panel init only), own DMA pixel push, own compositor, own USB serial driver, JPEGDEC / AnimatedGIF (bitbank2) for media | No LVGL: it wouldn't be faster here, and the PC now does the layout. Arduino_GFX's own push is 28 fps against 61, and Arduino's USB Serial loses bytes (§9) |
 | Filesystem on screen | LittleFS | Standard on ESP32, survives power loss |
 
+## 8b. Firmware design (step 6)
+
+Decided 2026-10-29.
+
+- **Landscape:** the screen stands in landscape, and the protocol stays 480×320 landscape. The firmware turns the image while compositing (panel x = 319 − landscape y, panel y = landscape x). Each 16-row panel strip reads 32-byte runs of the landscape image, one cache line each, so turning costs about nothing. Touch is mapped back the same way.
+- **Order**, one commit each:
+  - **6a:** the USB link (frames, ACKs, inventory, transfers to PSRAM and flash), offline screen and dimming. **Done 2026-10-29:** the real PC app syncs with the screen (HELLO answered in 26 ms, the three animations stored in flash with their CRC checked), the current page shows in landscape, and "Waiting for the PC" / "PC disconnected" show dimmed. The flash has 13.5 MB for files.
+  - **6b:** pages: compositor, swipe slide, dots, tap, long-press ring, toast.
+  - **6c:** animations (events over the page and full screen, boot animation) and GIF backgrounds.
+  - **6d:** video backgrounds; the MJPEG file format is proposed then.
+  - The framing is also unit-tested on the PC (`pio test -e native`).
+- **Flash:** one 3 MB app partition, no over-the-air updates (the owner flashes by USB); LittleFS gets the rest, about 12.9 MB.
+- **Two cores:** core 0 runs the USB link (read, ACK, write to flash); core 1 runs the display (touch, compositing, animations). Overlays stay compressed in PSRAM; the current page and its two neighbours are kept unpacked (~1.2 MB), so a swipe starts at once.
+- **Closing the COM port resets the board** (§9). Fixed on the PC side (2026-10-29): `transport.py` drops RTS, then DTR, before closing, and the screen keeps running. Only an app that is killed (or crashes) still resets it, because Windows then closes the port the plain way; the screen then plays the boot animation and waits for the PC.
+
 ## 9. Open questions
 
 - Exact WealthyExile responses: do they include items, tabs, a chaos and divine total, league-start history? (Settled during reverse-engineering.)
