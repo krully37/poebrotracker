@@ -251,5 +251,5 @@ Decided 2026-10-29.
 4b. `Client.txt` event watcher (level-up, death), tested against sample log lines, then a real log.
 5. **Hardware arrives**: validate pinout, rotation, touch, then measure frame rates. **Done 2026-10-29** (§9).
 6. Firmware: compositor, slides, offline screen, dimming, then GIF and video backgrounds, and the boot animation.
-7. WealthyExile reverse-engineering, then the adapter. Done with the owner's own WealthyExile account (decided 2026-10-29), not the friend's: the site works the same for every account, and the friend only pastes his own cookie at the end.
+7. WealthyExile reverse-engineering, then the adapter. Done with the owner's own WealthyExile account (decided 2026-10-29), not the friend's: the site works the same for every account, and the friend only pastes his own cookie at the end. **Done 2026-10-29:** the screen shows the real stash from WealthyExile (read every 5 min, counted like the site with the account's stack threshold), a tap syncs it with a "Syncing WealthyExile..." toast, PoE Pricer can be the source instead (bulk items and tabs of uniques) and gives the divine price, and the item-price card has poe.ninja prices. All checked on the owner's account, home server and screen.
 8. Windows .exe, auto-start, install guide; final test on a Windows PC.
