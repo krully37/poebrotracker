@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Callable
 
+from . import pages as pagelib
 from . import paths
 from .assets import AssetCache
 from .gamelog import Characters, GameEvent, LogWatcher, find_client_log
@@ -28,7 +29,7 @@ from .nowplaying import Player, create_player
 from .render import data as renderdata
 from .render import fonts, renderer, theme
 from .settings import Store
-from .sources import poepricer, wealthyexile
+from .sources import ninja, poepricer, wealthyexile
 from .sources.base import Snapshot, SourceError, rescaled
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ class App:
         self.last_fetch = 0.0  # when WealthyExile was last read (a tap reads again, at most every minute)
         self._fetch_now = threading.Event()
         self._fetcher: threading.Thread | None = None
+        self.prices = ninja.Prices(assets, store.settings["poeninja"]["interval"])
         self.content = ContentBuilder(media)
         self.link: ScreenLink | None = None
         self.simulator = None  # (SimScreen, LoopbackPair) when started with --simulator
@@ -119,7 +121,10 @@ class App:
                 if self._can_fetch() and (asked or time.time() - self.last_fetch >= self.store.settings["interval"]):
                     if asked and self.store.settings["source"] == "wealthyexile" and self.sync_wealthyexile():
                         time.sleep(SYNC_WAIT)  # WealthyExile reads the stash from GGG meanwhile
-                    if self.fetch(time.time()):
+                    fetched = self.fetch(time.time())
+                    if self.store.settings["poeninja"]["enabled"] and self.live:
+                        self.prices.refresh(self._priced_items(), self._league())  # only when 30 min old
+                    if fetched:
                         self._screen_sync()
 
         self._fetcher = threading.Thread(target=run, daemon=True, name="wealthyexile")
@@ -136,6 +141,15 @@ class App:
             return False
         log.info("WealthyExile sync sent")
         return True
+
+    def _priced_items(self) -> list[str]:
+        """Every item chosen in an item-price card on a shown page."""
+        names = []
+        for page in pagelib.visible(self.store.pages):
+            for slot in (page.get("slots") or {}).values():
+                if slot and slot.get("widget") == "item_price":
+                    names += [n for n in slot.get("items") or [] if n not in names]
+        return names
 
     def _can_fetch(self) -> bool:
         return self.store.settings["source"] == "poe-pricer" or bool(self.store.cookie)
@@ -185,7 +199,7 @@ class App:
             s = self.store.settings
             data = renderdata.build(
                 history, snap, now=now, synced_at=snap.time,
-                item_prices=demo_prices(snap.div_price) if demo else None,  # poe.ninja prices: not yet
+                item_prices=demo_prices(snap.div_price) if demo else self.prices.get(self._priced_items(), snap.league, snap.div_price),
                 spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon,
             )
         return dataclasses.replace(data, media=media), demo

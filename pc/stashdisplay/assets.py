@@ -102,6 +102,7 @@ class AssetCache:
         self.http.headers["User-Agent"] = USER_AGENT
         self._index: dict[str, str] | None = None
         self._names: dict[str, str] = {}
+        self._kinds: dict[str, list[str]] = {}  # lower-case name -> [endpoint, type]: its poe.ninja list
 
     # --- Icons ---------------------------------------------------------------
 
@@ -122,7 +123,8 @@ class AssetCache:
         cached = {}
         if self.index_path.exists():
             cached = json.loads(self.index_path.read_text(encoding="utf-8"))
-        fresh = time.time() - cached.get("fetched", 0) < INDEX_MAX_AGE
+        # An index from before item prices lacks "kinds": fetch it again once.
+        fresh = time.time() - cached.get("fetched", 0) < INDEX_MAX_AGE and "kinds" in cached
         if not fresh and not self.offline:
             try:
                 cached = self._fetch_index()
@@ -130,7 +132,14 @@ class AssetCache:
                 log.warning("Could not refresh the icon index: %s", e)
         self._index = cached.get("icons", {})
         self._names = cached.get("names", {})
+        self._kinds = cached.get("kinds", {})
         return self._index
+
+    def kind(self, name: str) -> tuple[str, str] | None:
+        """The poe.ninja list an item is on, as (endpoint, type), for its price."""
+        self.icon_index()
+        found = self._kinds.get(name.lower())
+        return (found[0], found[1]) if found else None
 
     def item_names(self, query: str, limit: int = 20) -> list[str]:
         """Item names containing `query` (case-insensitive), for the settings page's item picker."""
@@ -148,6 +157,7 @@ class AssetCache:
         league = self.http.get(f"{NINJA}/leagues", timeout=15).json()[0]["id"]
         icons: dict[str, str] = {}
         names: dict[str, str] = {}
+        kinds: dict[str, list[str]] = {}
         for endpoint, kind in ICON_SOURCES:
             r = self.http.get(f"{NINJA}/{endpoint}/overview", params={"league": league, "type": kind}, timeout=30)
             if r.ok:
@@ -156,8 +166,9 @@ class AssetCache:
                     icons.setdefault(name, url)
                 for original in _names_from(payload):
                     names.setdefault(original.lower(), original)
+                    kinds.setdefault(original.lower(), [endpoint, kind])
             time.sleep(0.5)  # be gentle: this runs about once a week
-        data = {"fetched": time.time(), "league": league, "icons": icons, "names": names}
+        data = {"fetched": time.time(), "league": league, "icons": icons, "names": names, "kinds": kinds}
         self.root.mkdir(parents=True, exist_ok=True)
         self.index_path.write_text(json.dumps(data), encoding="utf-8")
         log.info("Icon index refreshed: %d items (%s)", len(icons), league)
