@@ -11,6 +11,10 @@
         Render every page with demo data to PNG files (no screen, no WealthyExile needed).
         Downloads game icons and the Fontin font into the local cache the first time,
         unless --offline.
+
+    stashdisplay demo [--simulator] [--offline]
+        A ~30 s scripted show for filming the screen (stashdisplay/demo.py): demo data in
+        its own folder, values that move, a level-up, a map, a death, the idle cat.
 """
 
 import argparse
@@ -120,6 +124,12 @@ def cmd_dump(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    from . import demo
+
+    return demo.run(offline=args.offline, simulator=args.simulator)
+
+
 def setup_logging() -> None:
     handler = logging.handlers.RotatingFileHandler(paths.log_path(), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
@@ -194,6 +204,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int, default=7, help="demo data seed, for repeatable images")
     p.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
     p.set_defaults(func=cmd_preview)
+    m = sub.add_parser("demo", help="a ~30 s scripted show on demo data, for filming the screen")
+    m.add_argument("--simulator", action="store_true", help="play it on the simulated screen")
+    m.add_argument("--offline", action="store_true", help="only use icons and fonts already in the cache")
+    m.set_defaults(func=cmd_demo)
     d = sub.add_parser("dump", help="fetch the WealthyExile stash page once and save it, scrubbed")
     d.add_argument("--out", default="dumps", help="output folder (default: ./dumps, ignored by git)")
     d.set_defaults(func=cmd_dump)

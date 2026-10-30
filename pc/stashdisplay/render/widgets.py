@@ -278,7 +278,7 @@ def render_value(ctx: Ctx, box: Box, o: dict) -> None:
     if o["icon"]:
         if metric.kind in DIV_KINDS:
             icon = "Divine Orb"
-        elif draw.has_icon(ctx, "Chaos Orb") and value is not None:
+        elif metric.kind == "chaos" and draw.has_icon(ctx, "Chaos Orb") and value is not None:
             icon, main = "Chaos Orb", f"{value:,.0f}"  # the icon replaces the "c"
     sub = fill_placeholders(o["sub"], ctx.data) if o["sub"] else ""
     value_block(

@@ -148,6 +148,23 @@ def test_map_metrics_and_div_per_map():
     assert renderdata.build(h, None, now=NOW, synced_at=NOW).metrics.get("maps_session") is None
 
 
+def test_only_chaos_values_get_the_chaos_icon(demo, monkeypatch):
+    """With the game icons cached, the map tiles once came out as "6" and "435" with a Chaos Orb
+    instead of "6.4/h" and "7:48"."""
+    from stashdisplay.render import widgets
+
+    shown = []
+    monkeypatch.setattr(widgets.draw, "has_icon", lambda ctx, name: True)
+    monkeypatch.setattr(widgets, "value_block", lambda ctx, box, **kw: shown.append((kw["main"], kw["icon"])))
+    maps = next(p for p in pagelib.preset() if p["id"] == "maps")
+    renderer.overlay(maps, demo)
+    assert shown == [("12", None), ("6.4/h", None), ("7:48", None), (shown[3][0], "Divine Orb")]
+    shown.clear()
+    session = next(p for p in pagelib.preset() if p["id"] == "session")
+    renderer.overlay(session, demo)
+    assert shown[1][1] == "Chaos Orb"  # the divine price, in chaos
+
+
 def test_current_map_card_states(demo):
     import dataclasses
 

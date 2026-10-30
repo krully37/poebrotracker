@@ -27,8 +27,9 @@ _STOCK = [
 
 
 class DemoSource:
-    def __init__(self, step: float = 300, seed: int | None = None):
+    def __init__(self, step: float = 300, seed: int | None = None, noise: float = 0.02):
         self.step = step
+        self.noise = noise  # how far each item's price wanders from one fetch to the next
         self.rng = random.Random(seed)
         self.sim_time = time.time()
         # Per-item multiplier that drifts up over time: the stash "grows".
@@ -54,7 +55,7 @@ class DemoSource:
             self.qty["Divine Orb"] = max(0, self.qty["Divine Orb"] - rng.randint(2, 6))
 
         items = [
-            Item(name, self.qty[name], round(self.qty[name] * unit * rng.uniform(0.98, 1.02), 3), tab)
+            Item(name, self.qty[name], round(self.qty[name] * unit * rng.uniform(1 - self.noise, 1 + self.noise), 3), tab)
             for name, tab, _, unit in _STOCK
         ]
         tabs: dict[str, float] = {}

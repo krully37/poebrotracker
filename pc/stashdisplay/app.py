@@ -12,6 +12,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from . import maps as mapslib
 from . import pages as pagelib
@@ -88,9 +89,9 @@ class App:
         self.maps.on_back = self._back_from_map
 
     @classmethod
-    def create(cls, offline: bool = False) -> "App":
+    def create(cls, offline: bool = False, assets_root: Path | None = None) -> "App":
         store = Store.load(paths.settings_path())
-        assets = AssetCache(offline=offline)
+        assets = AssetCache(assets_root, offline=offline)
         characters = Characters(paths.characters_path())
         app = cls(store, assets, MediaStore(paths.app_dir() / "media"), characters,
                   History.load(paths.history_path()), MapTracker.load(paths.maps_path(), characters))
@@ -435,6 +436,18 @@ class App:
         src = self._demo_source
         src.sim_time = now - src.step  # fetch() steps forward, so the point lands exactly now
         self._demo_add(src.fetch())
+
+    def demo_step(self, loot: int = 0) -> None:
+        """One more demo point now, `loot` divines richer, on the screen: the demo command's
+        moving values (stashdisplay demo). Without price noise, so the value climbs a few
+        seconds apart instead of jumping up and down."""
+        now = time.time()
+        with self._data_lock:
+            self._demo_tick(now)
+            self._demo_source.noise = 0.0
+            self._demo_source.qty["Divine Orb"] += loot
+            self.refresh(now)
+        self._screen_sync()
 
     def preview_png(self, page: dict, index: int, count: int, force_demo: bool = False) -> tuple[bytes, bool]:
         data, is_demo = self.render_data(force_demo)

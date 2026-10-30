@@ -63,6 +63,12 @@ class IdleWatch:
         self._woken_until = self.clock() + WAKE_SECONDS
         self.check()
 
+    def pretend(self, idle: bool) -> None:
+        """Show the cat now, or stop pretending (the demo command), whatever a touch said before."""
+        self.forced = idle
+        self._woken_until = 0.0
+        self.check()
+
     def should_show(self) -> bool:
         s = self.settings()
         if not s["enabled"] or self.clock() < self._woken_until or self.media_playing():

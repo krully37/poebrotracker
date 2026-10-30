@@ -34,6 +34,14 @@ The settings, pages, uploaded backgrounds and log live in `%APPDATA%\stashdispla
 
 The page is only reachable from this PC. It needs the per-install token, which the tray link carries once and a cookie keeps afterwards, so other websites open in the browser cannot read or change it.
 
+## A demo to film
+
+```bash
+.venv/bin/python -m stashdisplay demo
+```
+
+A ~33 s scripted show on the screen, on demo data: the start animation, a level-up, a map with its timer, a death, back to the hideout with some loot, then the idle cat. Quit the app first (only one program can use the cable). Press Enter once the screen is ready, swipe the pages by hand while it plays, and press Enter again for another take. Add `--simulator` to rehearse it on the simulated screen. The real settings and history are not touched: it runs in a `demo` folder inside the app folder. The timeline is the `TIMELINE` list at the top of `stashdisplay/demo.py`.
+
 ## Preview the pages with demo data
 
 ```bash
@@ -79,6 +87,7 @@ tag attaches it to a release. The friend's guide is [docs/INSTALL.md](../docs/IN
 | `gamelog.py` | Follows the game's `Client.txt`: level-ups and deaths, which characters are the friend's |
 | `nowplaying.py` | What the PC plays (Windows media session, or a fake player) and the media buttons |
 | `app.py` | The running app shared by the settings page and the tray |
+| `demo.py` | `stashdisplay demo`: the scripted show for filming the screen |
 | `web/` | Settings page: Flask API (`server.py`) and the Alpine.js editor (`static/`) |
 | `tray.py` | Tray icon and menu |
 | `autostart.py` | "Start with Windows" (registry Run key) |
