@@ -130,13 +130,13 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return demo.run(offline=args.offline, simulator=args.simulator)
 
 
-def setup_logging() -> None:
+def setup_logging(console: bool = True) -> None:
     handler = logging.handlers.RotatingFileHandler(paths.log_path(), maxBytes=1_000_000, backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     root.addHandler(handler)
-    if sys.stderr:  # None in the windowed .exe
+    if console and sys.stderr:  # None in the windowed .exe
         root.addHandler(logging.StreamHandler())
 
 

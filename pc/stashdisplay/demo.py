@@ -48,8 +48,8 @@ PAST_TAGS = ["Bestiary", "Delirium", "Betrayal", "Expedition", "Harvest", "Abyss
 def demo_home() -> Path:
     """The demo's own folder, emptied: inside the app folder, so it is easy to find and remove."""
     home = paths.app_dir() / "demo"
-    shutil.rmtree(home, ignore_errors=True)
-    home.mkdir(parents=True)
+    shutil.rmtree(home, ignore_errors=True)  # what cannot go (a file held open) is written over by seed()
+    home.mkdir(parents=True, exist_ok=True)
     return home
 
 
@@ -161,7 +161,7 @@ def run(offline: bool = False, simulator: bool = False) -> int:
     os.environ["STASHDISPLAY_HOME"] = str(home)
     rng = random.Random()
     seed(home, time.time(), rng)
-    setup_logging()
+    setup_logging(console=False)  # the terminal only shows the demo's own lines, so the prompts stand out
     app = App.create(offline=offline, assets_root=cache)
     # The PC is left alone while filming: the map timer keeps running, and the cat waits for its step.
     app.maps.idle_seconds = lambda: None
@@ -198,11 +198,13 @@ def run(offline: bool = False, simulator: bool = False) -> int:
 
     show = Show(app, app.fake_log, rng)
     try:
-        input("Screen ready. Start filming, then press Enter. ")
+        print("\nScreen ready. Start filming, then press Enter to play the demo.")
+        input("> ")
         threading.Thread(target=values, daemon=True, name="demo-values").start()
         while True:
             show.play()
-            input("Done. Enter plays it again, Ctrl+C stops. ")
+            print("\nDone. Press Enter to play it again, or Ctrl+C to stop.")
+            input("> ")
     except (KeyboardInterrupt, EOFError):
         print()
     if app.link:
