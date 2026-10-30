@@ -184,7 +184,7 @@ Idea from Exile UI (Lailloken/Exile-UI, MIT, an AutoHotkey overlay): its map tra
 - **Numbers:** maps per hour = maps this session ÷ time since the session's first map started, shown once that is 15 min; average map time = the session's maps, without the one being run; div per map = session gain ÷ maps this session. A map counts in the session and the day it started in. Holding "maps this session" resets the session, like the session gain.
 - **Demo data:** until the first real map, previews and the screen show made-up maps (with demo stash data); real maps show as soon as there is one, even before WealthyExile is read.
 - **maps.json** keeps 14 days of maps, like the stash history; saved at each change and every minute while the timer runs.
-- **Maps page:** a new "Wide + four tiles" template (`wide4`): the current-map card on top, then maps this session (with today's under it), per hour, average and div per map. It is **last in the preset**, so a fresh install (or "Reset" in the page list) gets it; an existing install keeps its own pages and can add it by hand. The settings page offers templates, not ready-made pages, so there was no other list to add it to.
+- **Maps page:** a new "Wide + four tiles" template (`wide4`): the current-map card on top, then maps this session (with today's under it), per hour, average and div per map. It is **last in the preset**, so a fresh install (or "Reset" in the page list) gets it. **An existing install gets it added once** (owner, 2026-10-30): `settings.json` is now version 2, and loading a version-1 file appends the Maps page, unless a page already has the id `maps` or a current-map widget. A Maps page deleted afterwards stays deleted. The settings page offers templates, not ready-made pages, so there was no other list to add it to.
 - **Sync after a map:** when the friend leaves a map for any non-map area. A sync less than 5 min after the last one, a tap's included, waits until the 5 min are up; a tap's sync also covers a map that just ended. No toast (the tap's "Syncing WealthyExile..." is there because a tap needs an answer). Setting: `maps.sync_after_map`, in a "Map tracker" panel of the settings page.
 - **Simulator:** buttons to open a new map, go into a side area, make an NPC speak, go back to the hideout and back in by a portal.
 
@@ -246,13 +246,13 @@ Decided 2026-10-29.
 
 ## 9. Open questions
 
+- **Map tracker choices, answered 2026-10-30** (§5c):
+  1. Existing installs get the Maps page added on their own: **yes**, once (§5c, "Maps page").
+  2. The map timer updates **every second**, unless that is a problem on the real screen.
+  3. The league's own `Deepwater*` areas are **not maps** (owner: "whatever", so the recommendation stands, matching Exile UI's list).
 - **Waiting on the owner (2026-10-30):**
-  - Map tracker, chosen while building step 9 with recommendations (§5c):
-    1. Should existing installs get the new Maps page added on their own? Fresh installs and "Reset" already get it, as the last page.
-    2. Is the per-second map timer fine on the real screen, or should it update once a minute?
-    3. Should the current league's own areas (`DeepwaterEncounter`, `DeepwaterHub`) count as maps?
-  - Still to try on the real screen during real mapping: the live timer, and the WealthyExile sync after a map against the live site.
-  - **iPhone as the screen (idea, 2026-10-30):** an old iPhone shows the pages over Wi-Fi instead of the ESP32 screen. The plan is a web page that reuses the simulator's compositing and touch, served by a second, display-only server on the local network, with its own token in a QR-code link. The settings server stays on 127.0.0.1. Opened with "Add to Home Screen", Auto-Lock off and Guided Access. Waiting on two answers: the iPhone model and iOS version (old Safari may need extra work), and whether a LAN display server is acceptable given the 127.0.0.1 rule. About a day of work, with no firmware change.
+  - Still to try on the real screen during real mapping (the owner will, when he can): the live timer, and the WealthyExile sync after a map against the live site.
+  - **iPhone as the screen (idea, 2026-10-30; set aside by the owner: build for the friend first):** an old iPhone shows the pages over Wi-Fi instead of the ESP32 screen. The plan is a web page that reuses the simulator's compositing and touch, served by a second, display-only server on the local network, with its own token in a QR-code link. The settings server stays on 127.0.0.1. Opened with "Add to Home Screen", Auto-Lock off and Guided Access. Waiting on two answers: the iPhone model and iOS version (old Safari may need extra work), and whether a LAN display server is acceptable given the 127.0.0.1 rule. About a day of work, with no firmware change.
 
 - WealthyExile, **found 2026-10-29** (owner's account, from his Chrome tab):
   - No JSON API. The stash page's HTML (`GET https://wealthyexile.com/`, Next.js) embeds everything in its `self.__next_f` payload: `user.preferredLeague`, `user.lastSynced`, per-tab `tabValues` (hourly, chaos), `items` (name, quantity, tab, chaos price, icon, category) and `priceMap` (Divine Orb price per league). It also embeds an `accessToken`: never logged, dumped or kept.

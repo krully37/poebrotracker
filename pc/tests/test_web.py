@@ -72,6 +72,25 @@ def test_store_round_trip(tmp_path):
         assert oct(os.stat(path).st_mode & 0o777) == "0o600"
 
 
+def test_old_install_gets_the_maps_page_once(tmp_path):
+    path = tmp_path / "settings.json"
+    old = [p for p in pagelib.preset() if p["id"] != "maps"]
+    path.write_text(json.dumps({"version": 1, "pages": old}), encoding="utf-8")
+    store = Store.load(path)
+    assert [p["id"] for p in store.pages] == ["total", "top", "session", "maps"]
+    assert json.loads(path.read_text())["version"] == 2
+    # Deleted by hand afterwards: it stays deleted.
+    store.update(pages=old)
+    assert [p["id"] for p in Store.load(path).pages] == ["total", "top", "session"]
+
+
+def test_old_install_with_its_own_map_page_is_left_alone(tmp_path):
+    path = tmp_path / "settings.json"
+    own = {"id": "mine", "name": "My maps", "template": "hero", "slots": {"main": {"widget": "current_map"}}}
+    path.write_text(json.dumps({"version": 1, "pages": [own]}), encoding="utf-8")
+    assert [p["id"] for p in Store.load(path).pages] == ["mine"]
+
+
 def test_vault_round_trip_and_bad_input():
     assert vault.unseal(vault.seal("a=b; c=d")) == "a=b; c=d"
     assert vault.seal("") == {}

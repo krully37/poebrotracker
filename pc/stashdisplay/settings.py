@@ -15,6 +15,7 @@ from pathlib import Path
 from . import pages as pagelib
 from . import vault
 
+VERSION = 2  # of settings.json; Store.upgrade() brings older files up to date
 LANGUAGES = ["en", "fr"]
 SOURCES = ["wealthyexile", "poe-pricer"]  # where the stash comes from (docs/SCOPE.md §6)
 
@@ -110,17 +111,30 @@ class Store:
             return store
         data = json.loads(path.read_text(encoding="utf-8"))
         pages = [pagelib.normalize_page(p) for p in data.get("pages", [])] or pagelib.preset()
-        return cls(
+        store = cls(
             path=path,
             settings=normalize_settings(data.get("settings", {})),
             pages=pages,
             cookie=vault.unseal(data.get("cookie")),
             token=data.get("token") or secrets.token_urlsafe(24),
         )
+        if data.get("version", 1) < VERSION:
+            store.upgrade(data.get("version", 1))
+            store.save()
+        return store
+
+    def upgrade(self, version: int) -> None:
+        """Brings an older install's pages up to date, once: the saved version marks it done."""
+        if version < 2:
+            # Version 2 added the Maps page (docs/SCOPE.md §5c). Skipped if the friend already built one.
+            has_map = any(p["id"] == "maps" or any(s.get("widget") == "current_map" for s in p["slots"].values())
+                          for p in self.pages)
+            if not has_map:
+                self.pages.append(next(p for p in pagelib.preset() if p["id"] == "maps"))
 
     def save(self) -> None:
         data = {
-            "version": 1,
+            "version": VERSION,
             "settings": self.settings,
             "pages": self.pages,
             "cookie": vault.seal(self.cookie),
