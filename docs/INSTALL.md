@@ -13,8 +13,8 @@ The little screen shows your Path of Exile stash value. It needs one program on 
 3. A small icon appears next to the clock (look under the **^** arrow if you don't see it), and
    the settings page opens in your browser. That icon is the whole program: **right-click** it for
    the menu, **click** it to open the settings.
-4. Plug the screen into the PC with its USB-C cable. No driver is needed: it plays its cat, then
-   shows your pages once the program has found it.
+4. Plug the screen into the PC with its USB-C cable. No driver is needed: it plays its start
+   animation, then shows your pages once the program has found it.
 
 ## 2. Connect WealthyExile (3 minutes)
 
@@ -40,7 +40,7 @@ logs you out (about once a month), the screen says **Cookie expired**: do these 
   reset it.
 - Level-ups, deaths and game starts play a little animation, read from the game's log file. The
   program never touches the game itself.
-- When the PC is idle for 10 minutes, a cat bounces on the screen; touch it to get the pages back.
+- When the PC is idle for 10 minutes, an animation plays on the screen; touch it to get the pages back.
 
 ## 4. Maps
 

@@ -33,11 +33,14 @@ def icon() -> Path:
 
 def main() -> None:
     package = PC / "stashdisplay"
+    anims = package / "assets" / "anims"
     data = [
         (package / "assets" / "fonts", "stashdisplay/assets/fonts"),
-        (package / "assets" / "anims", "stashdisplay/assets/anims"),
         (package / "web" / "static", "stashdisplay/web/static"),
     ]
+    # The animation files only, not their README: the default animations are a surprise for the
+    # friend, and the exe unpacks into the temp folder while it runs (docs/SCOPE.md §5b).
+    data += [(f, "stashdisplay/assets/anims") for f in sorted(anims.iterdir()) if f.suffix in (".gif", ".png")]
     args = [
         str(PC / "packaging" / "entry.py"),
         "--name", "StashDisplay",

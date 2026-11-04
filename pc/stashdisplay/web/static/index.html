@@ -349,7 +349,9 @@
             <input type="file" accept="image/*,video/*" hidden :disabled="uploading"
                    @change="uploadMedia($event, (m) => { draft.settings.events[kind].media = m.id; })">
           </label>
-          <button class="btn small" @click="testEvent(kind)" x-text="t('ev.test')"></button>
+          <!-- The default animations are a surprise: Test only plays the friend's own files. -->
+          <button class="btn small" @click="testEvent(kind)" x-text="t('ev.test')"
+                  :disabled="!saved.settings.events[kind].media"></button>
         </div>
       </template>
       <p class="hint" x-text="t('ev.anim.hint')"></p>

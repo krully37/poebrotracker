@@ -14,8 +14,8 @@ par USB. (English version: [INSTALL.md](INSTALL.md).)
 3. Une petite icône apparaît près de l'horloge (sous la flèche **^** si vous ne la voyez pas), et
    la page de réglages s'ouvre dans votre navigateur. Cette icône est tout le programme :
    **clic droit** pour le menu, **clic** pour ouvrir les réglages.
-4. Branchez l'écran au PC avec son câble USB-C. Aucun pilote n'est nécessaire : il joue son chat,
-   puis affiche vos pages dès que le programme l'a trouvé.
+4. Branchez l'écran au PC avec son câble USB-C. Aucun pilote n'est nécessaire : il joue son animation
+   de démarrage, puis affiche vos pages dès que le programme l'a trouvé.
 
 ## 2. Connecter WealthyExile (3 minutes)
 
@@ -45,7 +45,7 @@ refaites ces étapes.
   de session pour le remettre à zéro.
 - Les montées de niveau, les morts et les lancements du jeu jouent une petite animation, lue dans
   le fichier journal du jeu. Le programme ne touche jamais au jeu lui-même.
-- Quand le PC est inactif depuis 10 minutes, un chat rebondit sur l'écran ; touchez-le pour
+- Quand le PC est inactif depuis 10 minutes, une animation s'affiche sur l'écran ; touchez-le pour
   retrouver les pages.
 
 ## 4. Cartes
