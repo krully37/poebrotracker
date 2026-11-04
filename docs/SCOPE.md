@@ -12,7 +12,7 @@ Items marked **[PROPOSED]** are technical choices made by Claude and still open 
 | Page 4 | To be defined | Covered by the custom pages, with the widgets listed in §4 |
 | Backgrounds | Black | Per-page background: **still image, GIF or video** |
 | Disconnected | After 10–15 min of silence | 30 s heartbeat; **"PC disconnected" after ~90 s**, and the screen **dims** |
-| Divine price | WealthyExile, else poe.ninja | Pluggable sources, in order: worked out from WealthyExile → the friends' own pricer (later) → poe.ninja |
+| Divine price | WealthyExile, else poe.ninja | PoE Pricer (the friends' own pricer) when it runs, else WealthyExile's own (§6) |
 | Game events | Not in the brief | **Level-up and death animations**, triggered by reading the game's `Client.txt` log (see §5b) |
 
 The brief's non-negotiable constraints are unchanged. Nothing touches the game, and the cookie stays on the PC (the screen only ever receives images). WealthyExile is polled about every 5 minutes, and no personal cloud service is used.
