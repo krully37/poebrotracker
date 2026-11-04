@@ -32,7 +32,8 @@ def icon_image(size: int = 64) -> Image.Image:
 
 def status_line(app: App) -> str:
     """The menu's first line: the screen, and why the stash could not be read, if it could not."""
-    line = STATUS.get(app.status["screen"], app.status["screen"])
+    state = app.link.state if app.link else "searching"  # searching, syncing or connected
+    line = STATUS["disconnected" if state == "searching" else "connected"]
     return f"{line} · {app.status['error']}" if app.status["error"] else line
 
 

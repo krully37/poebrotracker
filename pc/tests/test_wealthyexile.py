@@ -184,7 +184,7 @@ def test_an_expired_cookie_shows_on_the_screen_and_stops_polling_until_a_new_one
     monkeypatch.setattr(applib, "SYNC_WAIT", 0.0)
     app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
     app.store.settings["poeninja"]["enabled"] = False
-    app.link = type("Link", (), {"request_sync": lambda self: screen_syncs.append(1)})()
+    app.link = type("Link", (), {"state": "connected", "request_sync": lambda self: screen_syncs.append(1)})()
     app.store.cookie = "old=1"
 
     app._fetch_turn(False, 10_000.0)
@@ -193,7 +193,10 @@ def test_an_expired_cookie_shows_on_the_screen_and_stops_polling_until_a_new_one
     data, _ = app.render_data()
     assert data.error == "Cookie expired"
     assert renderer.sync_label(data) == ("Cookie expired", STALE)
-    assert "Cookie expired" in tray.status_line(app)
+    assert tray.status_line(app) == "Screen connected · Cookie expired"
+    app.link.state = "searching"
+    assert tray.status_line(app) == "Screen not connected · Cookie expired"
+    app.link.state = "connected"
     assert app.render_data(force_demo=True)[0].error is None  # the settings page's demo preview
 
     # Hours of turns and a tap: nothing more goes to WealthyExile with that cookie.

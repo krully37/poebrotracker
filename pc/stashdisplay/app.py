@@ -55,7 +55,7 @@ class App:
         self.store = store
         self.assets = assets
         self.media = media
-        self.status = {"screen": "disconnected", "last_sync": None, "error": None}
+        self.status = {"last_sync": None, "error": None}  # the screen's state is self.link.state
         self.on_save: list[Callable[[], None]] = [self._screen_sync]
         self._render_lock = threading.RLock()  # Pillow fonts are not safe to share across threads
         self._data_lock = threading.RLock()
