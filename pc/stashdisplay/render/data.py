@@ -64,6 +64,8 @@ class RenderData:
     item_prices: dict[str, ItemPrice] = field(default_factory=dict)
     # Item name -> local icon file (AssetCache.icon). None renders without game icons.
     icon: Callable[[str], Path | None] | None = None
+    # Item name -> its poe.ninja list as (endpoint, type) (AssetCache.kind), for the name's colour.
+    kind: Callable[[str], tuple[str, str] | None] | None = None
     media: "NowPlaying | None" = None  # what the PC is playing, for the media card
     current_map: CurrentMap | None = None  # the map being run (or the last one), for its card
     # Why the last read of the stash failed ("Cookie expired"...), shown in the top bar; None when it worked.
@@ -94,6 +96,7 @@ def build(
     spark_points: int = 48,
     rate_window: float = 3600,
     icon: Callable[[str], Path | None] | None = None,
+    kind: Callable[[str], tuple[str, str] | None] | None = None,
     maps: MapStats | None = None,
 ) -> RenderData:
     pts = history.points
@@ -131,6 +134,7 @@ def build(
         session_start=history.session_start,
         item_prices=item_prices or {},
         icon=icon,
+        kind=kind,
         current_map=maps.current if maps else None,
     )
 

@@ -103,7 +103,11 @@ Decided 2026-10-27. This is a private tool that is never distributed, so it uses
 - **Fontin** (the game's font) for titles, labels, item names and numbers. It is downloaded from the designer's site (exljbris.com), whose licence allows free use but forbids redistribution. Fontin has no "×", so quantities are written "x148".
 - **Tooltip-style frames redrawn in code**: gradient header bar, gold-brown borders, diamond ornaments. Each slot can use `tooltip` (header with the title), `plain` (frame only) or `none`.
 - Icons and fonts are **downloaded on first run and cached** in `%APPDATA%\stashdisplay\cache`. The icon index is refreshed at most once a week (~26 poe.ninja requests). Without the cache (offline, or download failed), the renderer falls back to bundled fonts and a drawn divine orb.
-- Not used: in-game text colours by item type.
+- **The game's colour codes** (owner, 2026-11-04; this replaces "not used: in-game text colours by item type"). Everything is in `pc/stashdisplay/render/theme.py`:
+  - **Item names** (Most valuable, Item prices) use the game's colour for the item's poe.ninja list: currency and the other exchange items beige `#AA9E82`, divination cards `#0EBAFF`, gems `#1BA29B`, uniques `#AF6025`, maps `#C8C8C8`. Unknown items stay white.
+  - **Map tiers** are white for T1–5, yellow for T6–10 and red for T11 and up. An area level below the maps' levels stays gold.
+  - **Mechanic tags** on the current-map card are pills in the mechanic's colour: a dim fill, then a border and text in that colour. Bestiary is rust orange, Delirium grey, Delve azurite cyan, Incursion blue, Betrayal (Syndicate) green, Blight yellow, Harvest teal, Ultimatum red, Maven magenta and Expedition brass. Among the side areas, Abyss is olive, a Vaal area is corrupted red `#D20000`, a Trial is gold and Starfall is orange. The owner picked Betrayal green, Blight yellow, Delirium grey and Incursion blue.
+  - **Deaths** are red once there is one, and **portals** are in the portal's blue.
 
 ## 4c. Settings page (step 3)
 

@@ -64,7 +64,7 @@ def demo_render_data(now: float, seed: int | None = None, assets: AssetCache | N
     history, _, last = demo_history(now, seed)
     return renderdata.build(
         history, last, now=now, synced_at=now - 130, item_prices=demo_prices(last.div_price),
-        icon=assets.icon if assets else None, maps=demo_stats(),
+        icon=assets.icon if assets else None, kind=assets.kind if assets else None, maps=demo_stats(),
     )
 
 

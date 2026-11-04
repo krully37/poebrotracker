@@ -266,7 +266,7 @@ class App:
             data = renderdata.build(
                 history, snap, now=now, synced_at=snap.time,
                 item_prices=demo_prices(snap.div_price) if demo else self.prices.get(self._priced_items(), snap.league, snap.div_price),
-                spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon,
+                spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon, kind=self.assets.kind,
                 maps=map_stats,
             )
         # The settings page's forced demo preview says nothing of the real stash's state.

@@ -23,7 +23,8 @@ from .data import DIV_KINDS, METRICS, RenderData, fmt_amount, fmt_clock, fmt_dur
 from .draw import Ctx
 from .fonts import BUNDLED, FALLBACK, NAME_FAMILY, TITLE_FAMILY, fit, font, text_size
 from .templates import Box
-from .theme import FAINT, FRAME_LINE, GOLD, LABEL, MUTED, SPARK, STALE, WHITE, signed_color
+from .theme import (DEATH, FAINT, GOLD, LABEL, MUTED, PORTAL, SPARK, STALE, WHITE, item_color, mechanic_color,
+                    signed_color, tier_color)
 
 FRAMES = ["tooltip", "plain", "none"]
 FONT_CHOICES = [*BUNDLED, *FALLBACK]
@@ -253,6 +254,12 @@ def amount_with_unit(ctx: Ctx, row: Box, right: float, value: float, f, unit: st
     return right - w
 
 
+def name_color(ctx: Ctx, name: str) -> str:
+    """An item name in the game's colour for its type (currency, card, gem, unique...)."""
+    lookup = ctx.data.kind if ctx.data else None
+    return item_color(lookup(name) if lookup else None)
+
+
 def empty(ctx: Ctx, box: Box, message: str) -> None:
     f = font(NAME_FAMILY, 14, 400)
     draw.text_in(ctx, box, draw.truncate(message, f, box.w), f, MUTED, "center", "middle")
@@ -344,7 +351,7 @@ def render_top_items(ctx: Ctx, box: Box, o: dict) -> None:
             draw.text_in(ctx, Box(name_right - qw, row.y, qw, row.h), qty, qf, MUTED, "right")
             name_right -= qw + 6
         name = draw.truncate(item.name, nf, name_right - left)
-        draw.text_in(ctx, Box(left, row.y, name_right - left, row.h), name, nf, WHITE, "left")
+        draw.text_in(ctx, Box(left, row.y, name_right - left, row.h), name, nf, name_color(ctx, item.name), "left")
 
 
 @widget("tab_totals", "Stash tabs", "Value of each stash tab, with bars.", [
@@ -405,7 +412,7 @@ def render_item_price(ctx: Ctx, box: Box, o: dict) -> None:
         else:
             right = amount_with_unit(ctx, row, right, price.chaos, vf, unit="Chaos Orb")
         label = draw.truncate(name, nf, right - 8 - left)
-        draw.text_in(ctx, Box(left, row.y, right - 8 - left, row.h), label, nf, WHITE, "left")
+        draw.text_in(ctx, Box(left, row.y, right - 8 - left, row.h), label, nf, name_color(ctx, name), "left")
 
 
 @widget("stack_value", "Stack or tab", "The value of one item stack or one stash tab.", [
@@ -684,9 +691,12 @@ def map_tags(ctx: Ctx, box: Box, tags: list[str], f) -> None:
             more = f"+{len(tags) - i}"
             draw.text_in(ctx, Box(int(x), box.y, max(1, int(right - x)), box.h), more, f, MUTED, "left")
             return
-        draw.paint(ctx, FRAME_LINE, lambda d, x=x, w=w: d.rounded_rectangle(
-            (x, box.y, x + w - 1, box.y + box.h - 1), radius=3, outline=255, width=1))
-        draw.text_in(ctx, Box(int(x + pad), box.y, int(w - 2 * pad) + 1, box.h), tag, f, LABEL, "left")
+        # A pill in the mechanic's colour: a dim fill of it, then its border and text.
+        color = mechanic_color(tag)
+        shape = (x, box.y, x + w - 1, box.y + box.h - 1)
+        draw.paint(ctx, color, lambda d, s=shape: d.rounded_rectangle(s, radius=3, fill=255), alpha=46)
+        draw.paint(ctx, color, lambda d, s=shape: d.rounded_rectangle(s, radius=3, outline=255, width=1))
+        draw.text_in(ctx, Box(int(x + pad), box.y, int(w - 2 * pad) + 1, box.h), tag, f, color, "left")
         x += w + pad
 
 
@@ -714,15 +724,22 @@ def render_current_map(ctx: Ctx, box: Box, o: dict) -> None:
     # Name and tier.
     tf = font(NUMBER_FAMILY, line_h, 700)
     tier_w = text_size(cur.tier, tf)[0]
-    draw.text_in(ctx, Box(box.x + box.w - tier_w, box.y, tier_w, line_h), cur.tier, tf, GOLD, "right")
+    draw.text_in(ctx, Box(box.x + box.w - tier_w, box.y, tier_w, line_h), cur.tier, tf, tier_color(cur.tier), "right")
     nf = font(NAME_FAMILY, line_h + 1, 400)
     name_w = box.w - tier_w - 8
     draw.text_in(ctx, Box(box.x, box.y, name_w, line_h), draw.truncate(cur.name, nf, name_w), nf, WHITE, "left")
     # Deaths and portals at the bottom, the tags above them when there is room.
     sf = font(NAME_FAMILY, small_h, 400)
     info_y = box.y + box.h - small_h
-    info = f"Deaths {cur.deaths}  ·  Portals {cur.portals}"
-    draw.text_in(ctx, Box(box.x, info_y, box.w, small_h), draw.truncate(info, sf, box.w), sf, MUTED, "left")
+    info_parts = [("Deaths ", MUTED), (str(cur.deaths), DEATH if cur.deaths else MUTED), ("  ·  Portals ", MUTED),
+                  (str(cur.portals), PORTAL)]
+    x = box.x
+    for part, color in info_parts:
+        w = text_size(part, sf)[0]
+        if x + w > box.x + box.w:
+            break
+        draw.text_in(ctx, Box(int(x), info_y, w + 1, small_h), part, sf, color, "left")
+        x += w
     timer_top, timer_bottom = box.y + line_h + gap, info_y - gap
     tags = cur.mechanics if o["mechanics"] else []
     tag_h = small_h + 4

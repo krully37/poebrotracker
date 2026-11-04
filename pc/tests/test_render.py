@@ -8,7 +8,8 @@ from stashdisplay.history import History
 from stashdisplay.render import data as renderdata
 from stashdisplay.render import renderer
 from stashdisplay.render.templates import TEMPLATES
-from stashdisplay.render.theme import DOTS_TOP, HEIGHT, WIDTH
+from stashdisplay.render.theme import (DOTS_TOP, GOLD, HEIGHT, ITEM_CURRENCY, ITEM_UNIQUE, MECHANIC_COLORS, TIER_RED,
+                                       TIER_WHITE, TIER_YELLOW, WHITE, WIDTH, item_color, tier_color)
 from stashdisplay.render.fonts import NAME_FAMILY, font, text_size
 from stashdisplay.render.widgets import WIDGETS, fill_placeholders, note_lines
 
@@ -184,3 +185,26 @@ def test_current_map_card_states(demo):
     # Holding "maps this session" resets the session, like the session gain.
     zones = pagelib.touch_zones(pagelib.preset()[3])
     assert [z["action"] for z in zones] == ["reset_session"]
+
+
+def test_every_map_tag_has_its_own_colour():
+    from stashdisplay import maps
+    tags = set(maps.MECHANICS.values()) | set(maps.SIDE_AREAS.values())
+    assert tags <= set(MECHANIC_COLORS)
+    assert len(set(MECHANIC_COLORS.values())) == len(MECHANIC_COLORS)
+
+
+@pytest.mark.parametrize("tier, color", [("T1", TIER_WHITE), ("T5", TIER_WHITE), ("T6", TIER_YELLOW),
+                                         ("T10", TIER_YELLOW), ("T11", TIER_RED), ("T17", TIER_RED),
+                                         ("Level 45", GOLD)])
+def test_map_tiers_use_the_games_white_yellow_red(tier, color):
+    assert tier_color(tier) == color
+
+
+@pytest.mark.parametrize("kind, color", [
+    (("exchange/current", "Currency"), ITEM_CURRENCY), (("exchange/current", "Scarab"), ITEM_CURRENCY),
+    (("exchange/current", "DivinationCard"), "#0EBAFF"), (("stash/current/item", "SkillGem"), "#1BA29B"),
+    (("stash/current/item", "UniqueWeapon"), ITEM_UNIQUE), (None, WHITE),
+])
+def test_item_names_use_the_games_colours(kind, color):
+    assert item_color(kind) == color
