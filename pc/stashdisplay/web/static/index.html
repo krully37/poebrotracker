@@ -334,7 +334,7 @@
         <input type="text" x-model="draft.settings.events.client_log" :placeholder="t('ev.log.auto')"></label>
       <p class="status" :class="events.found ? 'ok' : 'warn'"
          x-text="events.found ? t('ev.log.found') + ' ' + events.path : t('ev.log.missing')"></p>
-      <template x-for="kind in ['boot', 'launch', 'levelup', 'death']" :key="kind">
+      <template x-for="kind in ['boot', 'launch', 'levelup', 'death', 'lastportal']" :key="kind">
         <div class="event-row">
           <label class="inline"><input type="checkbox" x-model="draft.settings.events[kind].enabled">
             <span x-text="t('ev.' + kind)"></span></label>

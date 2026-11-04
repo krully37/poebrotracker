@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 TOASTS = {"reset_session": "Session reset", "reset_rate": "Div/h reset"}
 SYNCING = "Syncing WealthyExile..."  # the toast for a tap that syncs
 HOLDING = {"reset_session": "Resetting session", "reset_rate": "Resetting div/h"}  # the banner while held
-EVENT_KINDS = ("launch", "levelup", "death")
+EVENT_KINDS = ("launch", "levelup", "death", "lastportal")
 # "boot" is the start animation: the screen plays it at power-on, the PC each time it connects.
 ANIM_KINDS = ("boot", *EVENT_KINDS)
 CARD_SECONDS = 4.0  # the text stand-in for an event without a GIF
@@ -90,6 +90,7 @@ class App:
         self.maps = maps or MapTracker(None, self.characters)
         self.maps.on_change = self._screen_sync  # a new map, a portal, a death, a mechanic...
         self.maps.on_back = self._back_from_map
+        self.maps.on_last_portal = self._last_portal
 
     @classmethod
     def create(cls, offline: bool = False, assets_root: Path | None = None) -> "App":
@@ -425,11 +426,18 @@ class App:
         if self.store.settings["events"][event.kind]["enabled"]:
             self.play_event(event.kind, event.name, event.level)
 
+    def _last_portal(self) -> None:
+        """Back into an atlas map with one portal left in the device (docs/SCOPE.md §5c)."""
+        if self.store.settings["events"]["lastportal"]["enabled"]:
+            self.play_event("lastportal", "")
+
     def play_event(self, kind: str, name: str, level: int | None = None, force: bool = False) -> bool:
         """The animation for an event, full screen or over the page. The newest replaces the one
-        playing, except that a level-up never cuts a death short. False when the screen is not there."""
+        playing, except that a level-up or the last portal never cuts a death short. False when the
+        screen is not there."""
         now = time.monotonic()
-        if not force and kind == "levelup" and self._playing and self._playing[0] == "death" and now < self._playing[1]:
+        if (not force and kind in ("levelup", "lastportal") and self._playing and self._playing[0] == "death"
+                and now < self._playing[1]):
             return False
         if not self.link:
             return False
@@ -438,7 +446,8 @@ class App:
             played = self.link.play(file_id, None, seconds, over_page)
         else:
             # No GIF on the screen (none made yet, or no room): large text instead.
-            title = {"boot": "Stash Display", "launch": "Path of Exile", "levelup": f"Level {level}"}.get(kind, "Slain")
+            title = {"boot": "Stash Display", "launch": "Path of Exile", "levelup": f"Level {level}",
+                     "lastportal": "Last portal"}.get(kind, "Slain")
             with self._render_lock:
                 card = renderer.event_card(title, name, color=theme.DEATH if kind == "death" else theme.TITLE)
                 overlay = protocol.encode_overlay(card)

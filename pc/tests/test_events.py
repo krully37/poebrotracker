@@ -146,6 +146,14 @@ def test_levelup_gif_plays_twice(tmp_path, monkeypatch):
     assert builder.animation("death")[2] == 4.0  # once
 
 
+def test_built_in_last_portal_gif(tmp_path):
+    """The "run" clip: full screen, two loops of 2.5 s, small enough to share the flash."""
+    builder = contentlib.ContentBuilder(MediaStore(tmp_path / "m"))
+    file_id, f, seconds = builder.animation("lastportal")
+    assert file_id.startswith("anim-lastportal-") and f.format == "gif" and not f.over_page
+    assert seconds == 5.0 and len(f.data) < 2_000_000
+
+
 def _png() -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (64, 40), "green").save(buf, "PNG")
@@ -224,6 +232,28 @@ def test_events_play_on_the_screen(screen_app):
     pair.unplug()
     wait_for(lambda: app.link.state == "searching")
     assert app.play_event("levelup", "Krully", 94) is False
+
+
+def test_last_portal_plays_from_the_map_tracker(screen_app):
+    app, sim, _ = screen_app
+    hideout = 'Generating level 60 area "HideoutSpace" with seed 1'
+    city = 'Generating level 83 area "MapWorldsCitySquare" with seed 7'
+    lines = [city] + [hideout, city] * 4  # the fifth way in: one portal left
+    for line in lines[:-1]:
+        app.maps.feed(f"2026/10/27 19:04:11 1 2 [DEBUG Client 4242] {line}")
+    assert sim.anim is None
+    app.maps.feed(f"2026/10/27 19:04:11 1 2 [DEBUG Client 4242] {lines[-1]}")
+    wait_for(lambda: sim.anim is not None and sim.anim[1] == "@event")  # no GIF in this test: the card
+    assert app._playing[0] == "lastportal"
+    # It never cuts a death short, and it can be turned off.
+    app.on_game_event(GameEvent("death", "Krully"))
+    wait_for(lambda: (sim.anim[0] or "").startswith("anim-death-"))
+    assert app.play_event("lastportal", "") is False
+    app._playing = None
+    app.save({**app.store.settings, "events": {**app.store.settings["events"],
+                                               "lastportal": {"enabled": False, "media": ""}}}, None)
+    app._last_portal()
+    assert app._playing is None  # nothing was played
 
 
 # --- Start animations: power-on, PC connects, game start ----------------------------------------

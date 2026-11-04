@@ -25,7 +25,7 @@ ANIM_FIT = {"fit": "cover", "x": 50, "y": 50}
 STILL_SECONDS = p.STILL_SECONDS  # an image (or a video's still frame, for now) shown for an event
 MIN_SECONDS = p.ANIM_MIN_SECONDS  # shorter GIFs loop until then
 MAX_SECONDS = p.ANIM_MAX_SECONDS
-EVENT_LOOPS = {"levelup": 2}  # how many times an event's GIF plays (once if not listed)
+EVENT_LOOPS = {"levelup": 2, "lastportal": 2}  # how many times an event's GIF plays (once if not listed)
 IDLE_SPRITE = "idle.png"  # in ANIM_DIR: the cat cut out of the owner's photo
 IDLE_WIDTH = 150  # px on the screen; the photo's cat is 230 px wide, so never wider than that
 

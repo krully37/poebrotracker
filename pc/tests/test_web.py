@@ -195,8 +195,8 @@ def test_media_kinds_and_rejects(tmp_path):
 
 
 def test_event_test_button_covers_screen_and_game_start(client, app):
-    for kind in ("boot", "launch", "levelup", "death"):
+    for kind in ("boot", "launch", "levelup", "death", "lastportal"):
         r = client.post("/api/events/test", json={"kind": kind}, headers=WRITE)
         assert r.status_code == 200 and r.get_json() == {"played": False}  # no screen in this test
     assert client.post("/api/events/test", json={"kind": "nope"}, headers=WRITE).status_code == 400
-    assert set(app.store.settings["events"]) == {"client_log", "boot", "launch", "levelup", "death"}
+    assert set(app.store.settings["events"]) == {"client_log", "boot", "launch", "levelup", "death", "lastportal"}

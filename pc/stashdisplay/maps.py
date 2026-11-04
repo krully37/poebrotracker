@@ -41,6 +41,8 @@ MAX_STEP = 5.0  # a longer gap between two ticks (the PC asleep, the app stalled
 SAVE_EVERY = 60.0  # seconds between saves while a timer runs
 KEEP_SECONDS = 14 * 24 * 3600  # like the stash history
 MIN_RATE_SPAN = 15 * 60  # maps per hour shows once the session's maps span this long
+MAP_PORTALS = 6  # a map device opens six portals
+ATLAS_MAPS = "mapworlds"  # area ids of regular atlas maps: the only ones sure to have six
 
 _STAMP = r"^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d [^\[\]]*"
 AREA = re.compile(_STAMP + r'\[DEBUG Client \d+\] Generating level (\d+) area "([^"]+)" with seed (\d+)$')
@@ -154,6 +156,7 @@ class MapTracker:
         self.paused = False  # inside, but the PC has been idle for 10 s
         self.on_change: Callable[[], None] | None = None  # something the card shows changed
         self.on_back: Callable[[], None] | None = None  # back out of a map (hideout, town...)
+        self.on_last_portal: Callable[[], None] | None = None  # back into an atlas map with one portal left
         self.lock = threading.RLock()
         self._naming: MapRun | None = None  # a new map waiting for its "You have entered" line
         self._last_tick: float | None = None
@@ -192,10 +195,16 @@ class MapTracker:
     def feed(self, line: str) -> None:
         """One Client.txt line."""
         line = line.rstrip("\r\n")
-        changed = back = False
+        changed = back = last_portal = False
         with self.lock:
             if m := AREA.match(line):
+                before = self.current
+                portals = before.portals if before else 0
                 changed, back = self._enter(int(m.group(1)), m.group(2), m.group(3))
+                # The fifth way in leaves one portal in the device (docs/SCOPE.md §5c).
+                last_portal = (before is not None and self.current is before
+                               and before.portals == portals + 1 == MAP_PORTALS - 1
+                               and before.area.lower().startswith(ATLAS_MAPS))
             elif OPENING.match(line):
                 # The game (re)started: the friend is at the login screen, not in a map.
                 self._tick(self.clock())
@@ -207,6 +216,8 @@ class MapTracker:
             self._notify(self.on_change)
         if back:
             self._notify(self.on_back)
+        if last_portal:
+            self._notify(self.on_last_portal)
 
     def _enter(self, level: int, area: str, seed: str) -> tuple[bool, bool]:
         """An area change. Returns (the card changed, back out of a map)."""

@@ -37,7 +37,8 @@ STATIC = Path(__file__).with_name("static")
 COOKIE = "sd_token"
 WRITE_HEADER = "X-Stashdisplay"
 SIM_FPS = 20
-EVENT_NAMES = {"boot": "Screen start", "launch": "Game start", "levelup": "Level-up", "death": "Death"}
+EVENT_NAMES = {"boot": "Screen start", "launch": "Game start", "levelup": "Level-up", "death": "Death",
+               "lastportal": "Last portal"}
 SIM_CHARACTER = ("Testchar", "Witch")
 SIM_MAPS = [("MapWorldsCitySquare", "City Square"), ("MapWorldsStrand", "Strand"), ("MapWorldsDunes", "Dunes"),
             ("MapWorldsJungleValley", "Jungle Valley"), ("MapWorldsSilo", "Silo")]
@@ -359,7 +360,7 @@ def create_app(app: App) -> Flask:
             abort(400)
         own = app.characters.listing()
         name, level = (own[0]["name"], own[0]["level"]) if own else ("Exile", 92)
-        if kind in ("boot", "launch"):
+        if kind in ("boot", "launch", "lastportal"):
             name = ""  # not about a character
         return jsonify({"played": app.play_event(kind, name, level if kind == "levelup" else None, force=True)})
 

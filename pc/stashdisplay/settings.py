@@ -41,6 +41,7 @@ DEFAULTS: dict = {
         "launch": {"enabled": True, "media": ""},
         "levelup": {"enabled": True, "media": ""},
         "death": {"enabled": True, "media": ""},
+        "lastportal": {"enabled": True, "media": ""},  # back into a map with one portal left (§5c)
     },
     # The idle cat: after this many minutes without keyboard or mouse input (and no media
     # playing), the screen shows the cat bouncing around instead of the pages.

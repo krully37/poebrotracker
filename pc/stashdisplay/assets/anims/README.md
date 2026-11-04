@@ -5,6 +5,7 @@ Put the default animations here. They ship with the app and are sent to the scre
 - `start.gif`: the screen starting (power-on, and each time the PC connects), and the game starting
 - `levelup.gif`: played when one of the friend's characters levels up
 - `death.gif`: played when one of them is slain
+- `lastportal.gif`: played when going back into an atlas map with one portal left
 - `idle.png`: the idle cat, which the screen bounces around while the PC is idle (not a GIF: the screen moves and turns it itself)
 
 Guidelines:
@@ -47,6 +48,27 @@ rembg-venv/Scripts/rembg p -m birefnet-general-lite -ppm frames cut
 ```
 
 The 30 cut-out frames (RGBA PNGs) are then saved as one GIF: alpha below 128 becomes the transparent colour, frames last 70 ms, and the last one (the scream) is held for 0.97 s so the clip lasts exactly 3 s and never restarts. That GIF goes through `gif_over_page()` in `link/content.py`, which scales it to 180×320 and puts it in the bottom-right corner of a 480×320 frame. Result: 3.0 s, about 510 KB. The cutout's straight bottom and right edges (where the cat runs off the video) sit on the screen's edges.
+
+## How `lastportal.gif` was made
+
+From `images/run-bitch-run.gif` (a film clip the owner picked, 498×222, 10 fps, 2.5 s, not committed). Each frame is cropped to fill 480×320 (cover, centred), then all frames are mapped to one shared 64-colour palette without dithering and saved through `gif.encode()`. Live footage changes every pixel in every frame, so at the full 255 colours it was 2.9 MB; with 64 it is 1.8 MB and looks the same on the screen. From `pc/`:
+
+```
+.venv/Scripts/python -c "
+from PIL import Image, ImageSequence
+from stashdisplay.link import gif
+from stashdisplay.media import compose_background
+with Image.open('../images/run-bitch-run.gif') as im:
+    frames = [compose_background(f, 'cover', 50, 50) for f in ImageSequence.Iterator(im)]
+strip = Image.new('RGB', (480 * len(frames), 320))
+for i, f in enumerate(frames): strip.paste(f, (480 * i, 0))
+palette = strip.quantize(64, method=Image.Quantize.MEDIANCUT)
+frames = [f.quantize(palette=palette, dither=Image.Dither.NONE).convert('RGB') for f in frames]
+open('stashdisplay/assets/anims/lastportal.gif', 'wb').write(gif.encode(frames, [100] * len(frames)))
+"
+```
+
+It plays twice (`EVENT_LOOPS`): 5 s.
 
 ## How `idle.png` was made
 

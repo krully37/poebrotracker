@@ -92,6 +92,27 @@ def test_side_areas_join_their_map_without_a_portal(rig):
     assert rig.backs == []  # never back in the hideout yet
 
 
+def test_one_portal_left_on_the_fifth_way_in(rig):
+    lasts = []
+    rig.tracker.on_last_portal = lambda: lasts.append(rig.tracker.current.portals)
+    hideout = area("HideoutSpace", level=60)
+    rig.feed(area("MapWorldsCitySquare", seed=7))
+    for _ in range(3):  # portals 2, 3, 4; side areas and the same area again cost none
+        rig.feed(area("mapsidearea", seed=12), area("MapWorldsCitySquare", seed=7), area("MapWorldsCitySquare", seed=7))
+        rig.feed(hideout, area("MapWorldsCitySquare", seed=7))
+    assert rig.tracker.current.portals == 4 and lasts == []
+    rig.feed(hideout, area("MapWorldsCitySquare", seed=7))  # one portal left in the device
+    assert lasts == [5]
+    rig.feed(area("mapsidearea", seed=12), area("MapWorldsCitySquare", seed=7))
+    rig.feed(hideout, area("MapWorldsCitySquare", seed=7))  # the last one: nothing more
+    assert lasts == [5] and rig.tracker.current.portals == 6
+    # Only regular atlas maps: other map areas may not have six portals.
+    rig.feed(area("MavenBoss", seed=3))
+    for _ in range(5):
+        rig.feed(hideout, area("MavenBoss", seed=3))
+    assert lasts == [5]
+
+
 def test_only_time_inside_the_map_counts(rig):
     rig.feed(area("HideoutSpace", level=60))
     rig.run(30)
