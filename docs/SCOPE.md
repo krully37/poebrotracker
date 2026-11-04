@@ -113,6 +113,7 @@ Decided 2026-10-27. This is a private tool that is never distributed, so it uses
     - The timer is centred, with "Paused" or "Outside the map" under it.
     - At the bottom, the mechanics are coloured lines centred like a map's mods. Each gets its own line when there is room. Otherwise several share a line, then "+3" for the rest. The timer keeps at least 52 px.
     - In a plain frame or none, the name heads the card instead.
+    - The Most valuable list gets the tooltip's fading separator between its rows. Its frame stays gold, since the list mixes item types.
     - Concepts A (coloured data in the gold frames) and C (the card glowing in the main mechanic's colour) were not taken.
   - **Mechanic colours:** Bestiary is rust orange, Delirium grey, Delve azurite cyan, Incursion blue, Betrayal (Syndicate) green, Blight yellow, Harvest teal, Ultimatum red, Maven magenta and Expedition brass. Among the side areas, Abyss is olive, a Vaal area is corrupted red `#D20000`, a Trial is gold and Starfall is orange. The owner picked Betrayal green, Blight yellow, Delirium grey and Incursion blue.
   - **Deaths** are red once there is one, and **portals** are in the portal's blue.

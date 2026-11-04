@@ -23,8 +23,8 @@ from .data import DIV_KINDS, METRICS, RenderData, fmt_amount, fmt_clock, fmt_dur
 from .draw import Ctx
 from .fonts import BUNDLED, FALLBACK, NAME_FAMILY, TITLE_FAMILY, fit, font, text_size
 from .templates import Box
-from .theme import (DEATH, FAINT, GOLD, LABEL, MUTED, PORTAL, PROPERTY, SPARK, STALE, WHITE, item_color, mechanic_color,
-                    signed_color, tier_color)
+from .theme import (DEATH, FAINT, FRAME_LINE_DIM, GOLD, LABEL, MUTED, PORTAL, PROPERTY, SPARK, STALE, WHITE, item_color,
+                    mechanic_color, signed_color, tier_color)
 
 FRAMES = ["tooltip", "plain", "none"]
 FONT_CHOICES = [*BUNDLED, *FALLBACK]
@@ -349,7 +349,11 @@ def render_top_items(ctx: Ctx, box: Box, o: dict) -> None:
     if not items:
         empty(ctx, box, "No data yet")
         return
-    for row, item in zip(rows(box, o["count"]), items):
+    shown = list(zip(rows(box, o["count"]), items))
+    for i, (row, item) in enumerate(shown):
+        if i:
+            # The tooltip's separator between rows (docs/SCOPE.md §4b).
+            frames.separator(ctx, row.x, row.x + row.w, row.y, FRAME_LINE_DIM)
         nf, vf, qf = row_fonts(row)
         left = row_icon(ctx, item.name, row, row.x) if o["icons"] else row.x
         name_right = amount_with_unit(ctx, row, row.x + row.w, item.value, vf, icon=o["unit_icons"]) - 8
