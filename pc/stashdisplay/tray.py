@@ -1,6 +1,7 @@
 """Tray icon: the app's only window. Right-click for the menu; a click opens the settings."""
 
 import logging
+import time
 import webbrowser
 
 from PIL import Image, ImageDraw
@@ -29,6 +30,12 @@ def icon_image(size: int = 64) -> Image.Image:
     return img
 
 
+def status_line(app: App) -> str:
+    """The menu's first line: the screen, and why the stash could not be read, if it could not."""
+    line = STATUS.get(app.status["screen"], app.status["screen"])
+    return f"{line} · {app.status['error']}" if app.status["error"] else line
+
+
 def open_settings(app: App) -> None:
     webbrowser.open(server.url(app))
 
@@ -38,7 +45,19 @@ def run(app: App, web_server) -> None:
     import pystray
 
     def status_text(_item) -> str:
-        return STATUS.get(app.status["screen"], app.status["screen"])
+        return status_line(app)
+
+    def follow_status(icon) -> None:
+        # Windows builds the menu once: rebuild it, and the hover text, when the status changes.
+        icon.visible = True
+        shown = None
+        while icon.visible:
+            line = status_line(app)
+            if line != shown:
+                shown = line
+                icon.title = f"Stash Display · {line}"
+                icon.update_menu()
+            time.sleep(2)
 
     def toggle_autostart(icon, _item) -> None:
         autostart.set_enabled(not autostart.enabled())
@@ -59,4 +78,4 @@ def run(app: App, web_server) -> None:
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", quit_app),
     )
-    pystray.Icon("stashdisplay", icon_image(), "Stash Display", menu).run()
+    pystray.Icon("stashdisplay", icon_image(), "Stash Display", menu).run(setup=follow_status)

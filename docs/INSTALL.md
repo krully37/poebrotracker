@@ -28,7 +28,7 @@ The program reads your stash on WealthyExile, so it needs your WealthyExile logi
 
 The cookie works like a password: never send it to anyone, not even to the person who made the
 screen. It is stored encrypted on your PC and only ever goes to WealthyExile. When WealthyExile
-logs you out (about once a month), the screen's data stops updating: do these steps again.
+logs you out (about once a month), the screen says **Cookie expired**: do these steps again.
 
 ## 3. Every day
 
@@ -67,7 +67,10 @@ page, with a live preview.
 |---|---|
 | "Waiting for the PC" | The program is not running, or the cable is unplugged. Start `StashDisplay.exe`. |
 | "PC disconnected" (dim) | The program stopped or the cable was pulled. Start it again or replug the cable. |
-| "stale · 20m ago" (the time keeps growing) | WealthyExile could not be read for 15 minutes. Open the settings page and hover the badge at the top right: it says why. **Cookie expired**: paste a new one (part 2). **WealthyExile unavailable**: the site is down or asks for a check; wait, it retries every 5 minutes. **WealthyExile changed**: the site changed; send the log (below). |
+| "Cookie expired" (top right) | WealthyExile logged you out. Paste a new cookie (part 2); the program reads it at once. Until then it stops asking WealthyExile and the screen keeps your last numbers. |
+| "WealthyExile unavailable" | The site is down or asks for a check. Nothing to do: it tries again every 5 minutes. |
+| "WealthyExile changed" | The site changed and the program cannot read it any more. Send the log (below). |
+| "stale · 20m ago" | No new numbers for 15 minutes. Right-click the icon: its first line says why. |
 | "waiting for data" | WealthyExile has not been read yet: check the cookie (part 2). |
 
 The program writes a log at `%APPDATA%\stashdisplay\stashdisplay.log`: send it if you ask for help

@@ -7,6 +7,7 @@ grows by one point every 5 minutes, so the screen and the simulator show somethi
 """
 
 import dataclasses
+import hashlib
 import io
 import logging
 import threading
@@ -33,7 +34,7 @@ from .render import data as renderdata
 from .render import fonts, renderer, theme
 from .settings import Store
 from .sources import ninja, poepricer, wealthyexile
-from .sources.base import Snapshot, SourceError, rescaled
+from .sources.base import AuthError, Snapshot, SourceError, rescaled
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +70,8 @@ class App:
         self.last_fetch = 0.0  # when WealthyExile was last read (a tap reads again, at most every minute)
         self.last_we_sync = 0.0  # when WealthyExile was last synced (a tap, or after a map)
         self._map_sync_pending = False  # back from a map: sync when 5 minutes have passed since the last one
+        # A hash of the cookie WealthyExile turned down: nothing more is asked with it (docs/SCOPE.md §6).
+        self._expired_cookie: str | None = None
         self._fetch_now = threading.Event()
         self._fetcher: threading.Thread | None = None
         self.prices = ninja.Prices(assets, store.settings["poeninja"]["interval"])
@@ -139,20 +142,36 @@ class App:
         """One turn of the fetcher (every 5 s): sync WealthyExile first when a tap asked for it or
         a map is over, then read the stash; otherwise read it every `interval` seconds."""
         s = self.store.settings
+        new_cookie = self._expired_cookie is not None and bool(self.store.cookie) and not self._cookie_expired()
+        if new_cookie:
+            self._expired_cookie = None  # another cookie was saved: read with it now
         after_map = self._map_sync_due(now)
-        if not self._can_fetch() or not (asked or after_map or now - self.last_fetch >= s["interval"]):
+        if not self._can_fetch() or not (asked or after_map or new_cookie or now - self.last_fetch >= s["interval"]):
             return
+        error = self.status["error"]
         waited = 0.0
         if (asked or after_map) and s["source"] == "wealthyexile":
             self.last_we_sync, self._map_sync_pending = now, False  # this sync covers the map too
             if self.sync_wealthyexile():
                 time.sleep(SYNC_WAIT)  # WealthyExile reads the stash from GGG meanwhile
                 waited = SYNC_WAIT
-        fetched = self.fetch(now + waited)
+        fetched = not self._cookie_expired() and self.fetch(now + waited)
         if s["poeninja"]["enabled"] and self.live:
             self.prices.refresh(self._priced_items(), self._league())  # only when 30 min old
-        if fetched:
-            self._screen_sync()
+        if fetched or self.status["error"] != error:
+            self._screen_sync()  # new values, or the top bar's error appears or changes
+
+    def _cookie_key(self) -> str:
+        return hashlib.sha256(self.store.cookie.encode()).hexdigest()
+
+    def _cookie_expired(self) -> bool:
+        """WealthyExile turned the saved cookie down: wait for another one, asking nothing."""
+        return (self.store.settings["source"] == "wealthyexile" and self._expired_cookie is not None
+                and self._expired_cookie == self._cookie_key())
+
+    def _turned_down(self) -> None:
+        self._expired_cookie = self._cookie_key()
+        log.info("WealthyExile: cookie expired; not asking again until a new one is saved")
 
     def _back_from_map(self) -> None:
         """Back in the hideout (or a town) after a map: sync WealthyExile so div per map stays
@@ -164,7 +183,7 @@ class App:
     def _map_sync_due(self, now: float) -> bool:
         s = self.store.settings
         return (self._map_sync_pending and s["maps"]["sync_after_map"] and s["source"] == "wealthyexile"
-                and bool(self.store.cookie) and now - self.last_we_sync >= MAP_SYNC_EVERY)
+                and bool(self.store.cookie) and not self._cookie_expired() and now - self.last_we_sync >= MAP_SYNC_EVERY)
 
     def sync_wealthyexile(self) -> bool:
         """What WealthyExile's "Sync stash" button does: on a tap, and back from a map at most
@@ -174,6 +193,9 @@ class App:
             wealthyexile.sync(self.store.cookie)
         except SourceError as e:
             log.info("WealthyExile sync: %s", e.short)  # never the reply: it can carry the session
+            if isinstance(e, AuthError):
+                self._turned_down()
+                self.status["error"] = e.short
             return False
         log.info("WealthyExile sync sent")
         return True
@@ -188,7 +210,7 @@ class App:
         return names
 
     def _can_fetch(self) -> bool:
-        return self.store.settings["source"] == "poe-pricer" or bool(self.store.cookie)
+        return self.store.settings["source"] == "poe-pricer" or (bool(self.store.cookie) and not self._cookie_expired())
 
     def _league(self) -> str:
         """The league to ask PoE Pricer about: WealthyExile's once known, else poe.ninja's current one."""
@@ -211,6 +233,8 @@ class App:
                     snap = rescaled(snap, snap.div_price / rate, rate)
         except SourceError as e:
             log.info("stash source: %s", e.short)  # never WealthyExile's reply: it can carry the session
+            if isinstance(e, AuthError) and self.store.settings["source"] == "wealthyexile":
+                self._turned_down()
             self.status["error"] = e.short
             return False
         with self._data_lock:
@@ -245,7 +269,8 @@ class App:
                 spark_points=s["spark_points"], rate_window=s["rate_window_minutes"] * 60, icon=self.assets.icon,
                 maps=map_stats,
             )
-        return dataclasses.replace(data, media=media), demo
+        # The settings page's forced demo preview says nothing of the real stash's state.
+        return dataclasses.replace(data, media=media, error=None if force_demo else self.status["error"]), demo
 
     # --- Screen ---------------------------------------------------------------------------
 
@@ -317,6 +342,8 @@ class App:
                 self.player.command(event["action"])  # the card follows through on_change
             return
         if kind == "tap":
+            if self._cookie_expired():
+                return  # the top bar already says "Cookie expired": a sync could not work
             with self._data_lock:
                 last = self.last_fetch if self.live else (self._demo_snapshot.time if self._demo_snapshot else 0)
                 if now - last < self.store.settings["min_refresh_interval"]:

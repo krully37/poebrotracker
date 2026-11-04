@@ -27,6 +27,19 @@ from .widgets import NUMBER_FAMILY, WIDGETS, faint_frame, slot_title, without_ti
 MAX_DOTS = 8
 
 
+def sync_label(data: RenderData) -> tuple[str, str]:
+    """The top bar's freshness text and its colour. A failed read says why ("Cookie expired",
+    "WealthyExile unavailable"...) straight away (docs/SCOPE.md §6)."""
+    if data.error:
+        return data.error, STALE
+    if data.synced_at is None:
+        return "waiting for data", LABEL
+    ago = fmt_duration(data.now - data.synced_at)
+    if data.stale:
+        return f"stale · {ago} ago", STALE
+    return ("synced just now" if ago == "now" else f"synced {ago} ago"), LABEL
+
+
 def header(ctx: Ctx, page: dict) -> None:
     opts = page["header"]
     if not any(opts.values()):
@@ -42,14 +55,7 @@ def header(ctx: Ctx, page: dict) -> None:
         right -= cw + 12
     if opts["synced"]:
         sf = font(NAME_FAMILY, 13, 400)
-        data = ctx.data
-        if data.synced_at is None:
-            label, color = "waiting for data", LABEL
-        elif data.stale:
-            label, color = f"stale · {fmt_duration(data.now - data.synced_at)} ago", STALE
-        else:
-            ago = fmt_duration(data.now - data.synced_at)
-            label, color = ("synced just now" if ago == "now" else f"synced {ago} ago"), LABEL
+        label, color = sync_label(ctx.data)
         sw = text_size(label, sf)[0]
         draw.text_in(ctx, Box(right - sw, box.y + 3, sw, box.h - 8), label, sf, color, "right")
         right -= sw + 12

@@ -66,6 +66,8 @@ class RenderData:
     icon: Callable[[str], Path | None] | None = None
     media: "NowPlaying | None" = None  # what the PC is playing, for the media card
     current_map: CurrentMap | None = None  # the map being run (or the last one), for its card
+    # Why the last read of the stash failed ("Cookie expired"...), shown in the top bar; None when it worked.
+    error: str | None = None
 
     @property
     def stale(self) -> bool:

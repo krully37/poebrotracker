@@ -31,7 +31,7 @@ forme de « cookie ».
 
 Le cookie fonctionne comme un mot de passe : ne l'envoyez à personne, pas même à la personne qui a
 fait l'écran. Il est enregistré chiffré sur votre PC et ne part que vers WealthyExile. Quand
-WealthyExile vous déconnecte (environ une fois par mois), les données de l'écran ne bougent plus :
+WealthyExile vous déconnecte (environ une fois par mois), l'écran affiche **Cookie expired** :
 refaites ces étapes.
 
 ## 3. Au quotidien
@@ -75,7 +75,10 @@ avec un aperçu en direct.
 |---|---|
 | « Waiting for the PC » | Le programme ne tourne pas, ou le câble est débranché. Lancez `StashDisplay.exe`. |
 | « PC disconnected » (assombri) | Le programme s'est arrêté ou le câble a été retiré. Relancez-le ou rebranchez le câble. |
-| « stale · 20m ago » (la durée augmente) | WealthyExile n'a pas pu être lu depuis 15 minutes. Ouvrez la page de réglages et survolez le badge en haut à droite : il dit pourquoi. **Cookie expired** : collez-en un nouveau (partie 2). **WealthyExile unavailable** : le site est en panne ou demande une vérification ; attendez, il réessaie toutes les 5 minutes. **WealthyExile changed** : le site a changé ; envoyez le journal (ci-dessous). |
+| « Cookie expired » (en haut à droite) | WealthyExile vous a déconnecté. Collez un nouveau cookie (partie 2) ; le programme le lit tout de suite. D'ici là, il ne demande plus rien à WealthyExile et l'écran garde vos derniers chiffres. |
+| « WealthyExile unavailable » | Le site est en panne ou demande une vérification. Rien à faire : il réessaie toutes les 5 minutes. |
+| « WealthyExile changed » | Le site a changé et le programme ne sait plus le lire. Envoyez le journal (ci-dessous). |
+| « stale · 20m ago » | Pas de nouveaux chiffres depuis 15 minutes. Clic droit sur l'icône : sa première ligne dit pourquoi. |
 | « waiting for data » | WealthyExile n'a pas encore été lu : vérifiez le cookie (partie 2). |
 
 Le programme écrit un journal dans `%APPDATA%\stashdisplay\stashdisplay.log` : envoyez-le si vous

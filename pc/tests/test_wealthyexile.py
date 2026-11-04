@@ -154,3 +154,83 @@ def test_sync_sends_what_the_sites_button_sends():
     assert json.loads(body) == [10, "$D2026-10-29T20:08:00.000Z", "$D2025-01-01T21:20:33.000Z"]
     with pytest.raises(SourceError):
         we.sync_action("<html></html>", site)
+
+
+def test_an_expired_cookie_shows_on_the_screen_and_stops_polling_until_a_new_one(tmp_path, monkeypatch):
+    """docs/SCOPE.md §6: "Cookie expired" on the screen and the tray, and no more requests to
+    WealthyExile (a tap's sync included) until another cookie is saved, which is read at once."""
+    from stashdisplay import app as applib
+    from stashdisplay import tray
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.render import renderer
+    from stashdisplay.render.theme import STALE
+    from stashdisplay.settings import Store
+    from stashdisplay.sources import poepricer
+    from stashdisplay.sources.base import Snapshot
+
+    calls, syncs, screen_syncs = [], [], []
+
+    def fetch(cookie, now):
+        calls.append(cookie)
+        if cookie == "old=1":
+            raise AuthError("Cookie expired")
+        return Snapshot(total=40.0, time=now, league="L", div_price=300.0)
+
+    monkeypatch.setattr(we, "fetch", fetch)
+    monkeypatch.setattr(we, "sync", lambda cookie: syncs.append(cookie))
+    monkeypatch.setattr(poepricer, "running", lambda url: False)
+    monkeypatch.setattr(applib, "SYNC_WAIT", 0.0)
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    app.store.settings["poeninja"]["enabled"] = False
+    app.link = type("Link", (), {"request_sync": lambda self: screen_syncs.append(1)})()
+    app.store.cookie = "old=1"
+
+    app._fetch_turn(False, 10_000.0)
+    assert calls == ["old=1"] and app.status["error"] == "Cookie expired"
+    assert screen_syncs  # the screen is told at once, not at the next good read
+    data, _ = app.render_data()
+    assert data.error == "Cookie expired"
+    assert renderer.sync_label(data) == ("Cookie expired", STALE)
+    assert "Cookie expired" in tray.status_line(app)
+    assert app.render_data(force_demo=True)[0].error is None  # the settings page's demo preview
+
+    # Hours of turns and a tap: nothing more goes to WealthyExile with that cookie.
+    for t in range(10_005, 20_000, 5):
+        app._fetch_turn(False, float(t))
+    app.on_screen_event({"type": "tap"})
+    app._fetch_turn(True, 20_000.0)
+    assert calls == ["old=1"] and syncs == []
+
+    # A new cookie is read on the next turn, without waiting for the 5 minutes.
+    app.store.cookie = "new=2"
+    app._fetch_turn(False, 20_005.0)
+    assert calls == ["old=1", "new=2"] and app.status["error"] is None
+    data, _ = app.render_data()
+    assert data.error is None and renderer.sync_label(data)[0] != "Cookie expired"
+    assert "Cookie expired" not in tray.status_line(app)
+
+
+def test_other_read_failures_show_on_the_screen_but_polling_goes_on(tmp_path, monkeypatch):
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.settings import Store
+    from stashdisplay.sources import poepricer
+
+    calls = []
+
+    def fetch(cookie, now):
+        calls.append(now)
+        raise SourceError(we.UNAVAILABLE)
+
+    monkeypatch.setattr(we, "fetch", fetch)
+    monkeypatch.setattr(poepricer, "running", lambda url: False)
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    app.store.settings["poeninja"]["enabled"] = False
+    app.store.cookie = "a=b"
+    app._fetch_turn(False, 10_000.0)
+    assert app.render_data()[0].error == we.UNAVAILABLE
+    app._fetch_turn(False, 10_000.0 + app.store.settings["interval"])
+    assert len(calls) == 2  # tried again at the next turn
