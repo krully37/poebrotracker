@@ -43,23 +43,45 @@ def content_box(box: Box, titled: bool) -> Box:
     return Box(box.x + 8, box.y + hh + 6, box.w - 16, box.h - hh - 11)
 
 
-def tooltip(ctx: Ctx, box: Box, title: str = "") -> Box:
-    """Draw a tooltip frame (with a header bar when there is a title). Returns the content area."""
+def mix(color: str, other: str, amount: float) -> str:
+    """`amount` of `color` over `other`, as a hex colour."""
+    a, b = draw.rgba(color), draw.rgba(other)
+    return "#" + "".join(f"{round(a[i] * amount + b[i] * (1 - amount)):02X}" for i in range(3))
+
+
+def tooltip(ctx: Ctx, box: Box, title: str = "", tint: str | None = None) -> Box:
+    """Draw a tooltip frame (with a header bar when there is a title). Returns the content area.
+
+    With a `tint`, the header takes that colour, like an item's header in the game (a map's
+    tier colour): the title in it, the bar and its lines tinted.
+    """
     x0, y0, x1, y1 = box.x, box.y, box.x + box.w - 1, box.y + box.h - 1
     draw.paint(ctx, FRAME_FILL, lambda d: d.rectangle((x0, y0, x1, y1), fill=255), alpha=FILL_ALPHA)
     draw.paint(ctx, FRAME_LINE_DIM, lambda d: d.rectangle((x0, y0, x1, y1), outline=255, width=1))
     if not title:
         return content_box(box, False)
     hh = header_height(box)
-    gradient_bar(ctx, Box(box.x + 1, box.y + 1, box.w - 2, hh))
-    hline(ctx, x0, x1, y0, FRAME_LINE, alpha=160)
-    hline(ctx, x0, x1, y0 + hh, FRAME_LINE)
+    line, text = (mix(tint, FRAME_LINE, 0.6), tint) if tint else (FRAME_LINE, TITLE)
+    mid = mix(tint, HEADER_EDGE, 0.28) if tint else HEADER_MID
+    gradient_bar(ctx, Box(box.x + 1, box.y + 1, box.w - 2, hh), mid=mid)
+    hline(ctx, x0, x1, y0, line, alpha=160)
+    hline(ctx, x0, x1, y0 + hh, line)
     cy = y0 + hh / 2
-    diamond(ctx, x0 + 6, cy, 3)
-    diamond(ctx, x1 - 6, cy, 3)
+    diamond(ctx, x0 + 6, cy, 3, line)
+    diamond(ctx, x1 - 6, cy, 3, line)
     tf = fit(title, TITLE_FAMILY, 400, box.w - 34, int(hh * 0.62), max_size=16)
-    draw.text_in(ctx, Box(box.x + 14, box.y, box.w - 28, hh), draw.truncate(title, tf, box.w - 34), tf, TITLE, "center", "middle")
+    draw.text_in(ctx, Box(box.x + 14, box.y, box.w - 28, hh), draw.truncate(title, tf, box.w - 34), tf, text, "center", "middle")
     return content_box(box, True)
+
+
+def separator(ctx: Ctx, x0: int, x1: int, y: int, color: str = FRAME_LINE) -> None:
+    """The thin line between a tooltip's sections, fading out at both ends."""
+    w = max(1, x1 - x0)
+    ramp = Image.new("L", (w, 1))
+    ramp.putdata([int(255 * min(1.0, 3 * (1 - abs(2 * i / max(1, w - 1) - 1)))) for i in range(w)])
+    layer = Image.new("RGBA", (w, 1), draw.rgba(color))
+    layer.putalpha(ramp.point(lambda p: p * 200 // 255))
+    ctx.img.alpha_composite(layer, (x0, y))
 
 
 def page_header(ctx: Ctx, box: Box) -> None:

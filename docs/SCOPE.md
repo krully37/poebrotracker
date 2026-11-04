@@ -106,7 +106,15 @@ Decided 2026-10-27. This is a private tool that is never distributed, so it uses
 - **The game's colour codes** (owner, 2026-11-04; this replaces "not used: in-game text colours by item type"). Everything is in `pc/stashdisplay/render/theme.py`:
   - **Item names** (Most valuable, Item prices) use the game's colour for the item's poe.ninja list: currency and the other exchange items beige `#AA9E82`, divination cards `#0EBAFF`, gems `#1BA29B`, uniques `#AF6025`, maps `#C8C8C8`. Unknown items stay white.
   - **Map tiers** are white for T1–5, yellow for T6–10 and red for T11 and up. An area level below the maps' levels stays gold.
-  - **Mechanic tags** on the current-map card are pills in the mechanic's colour: a dim fill, then a border and text in that colour. Bestiary is rust orange, Delirium grey, Delve azurite cyan, Incursion blue, Betrayal (Syndicate) green, Blight yellow, Harvest teal, Ultimatum red, Maven magenta and Expedition brass. Among the side areas, Abyss is olive, a Vaal area is corrupted red `#D20000`, a Trial is gold and Starfall is orange. The owner picked Betrayal green, Blight yellow, Delirium grey and Incursion blue.
+  - **The current-map card is the map's tooltip** (concept B of three, owner, 2026-11-04). In a tooltip frame:
+    - The header bar shows the map's name in its tier colour.
+    - Under it, a property line on one row: "Map Tier: 16", "Portals: 2" and "Deaths: 0", with names in the game's property grey `#7F7F7F`.
+    - Separator lines in the tier colour, fading at both ends, split the sections.
+    - The timer is centred, with "Paused" or "Outside the map" under it.
+    - At the bottom, the mechanics are coloured lines centred like a map's mods. Each gets its own line when there is room. Otherwise several share a line, then "+3" for the rest. The timer keeps at least 52 px.
+    - In a plain frame or none, the name heads the card instead.
+    - Concepts A (coloured data in the gold frames) and C (the card glowing in the main mechanic's colour) were not taken.
+  - **Mechanic colours:** Bestiary is rust orange, Delirium grey, Delve azurite cyan, Incursion blue, Betrayal (Syndicate) green, Blight yellow, Harvest teal, Ultimatum red, Maven magenta and Expedition brass. Among the side areas, Abyss is olive, a Vaal area is corrupted red `#D20000`, a Trial is gold and Starfall is orange. The owner picked Betrayal green, Blight yellow, Delirium grey and Incursion blue.
   - **Deaths** are red once there is one, and **portals** are in the portal's blue.
 
 ## 4c. Settings page (step 3)

@@ -21,7 +21,7 @@ from .fonts import NAME_FAMILY, TITLE_FAMILY, font, text_size
 from .fonts import fit as fit_font
 from .templates import HEADER_BOX, TEMPLATES, Box
 from .theme import BACKGROUND, DOTS_Y, FAINT, FRAME_FILL, FRAME_LINE_DIM, HEIGHT, HOLD_BAR, LABEL, MUTED, STALE, TITLE, WHITE, WIDTH
-from .widgets import NUMBER_FAMILY, WIDGETS, faint_frame, slot_title, without_title
+from .widgets import NUMBER_FAMILY, WIDGETS, faint_frame, slot_header, without_title
 
 # Above this many pages the screen shows "3/9" instead of dots.
 MAX_DOTS = 8
@@ -76,7 +76,8 @@ def overlay(page: dict, data: RenderData, show_empty_slots: bool = False) -> Ima
             continue
         options = slot
         if slot["frame"] == "tooltip":
-            box = frames.tooltip(ctx, box, slot_title(slot))
+            title, tint = slot_header(slot, data)
+            box = frames.tooltip(ctx, box, title, tint)
             options = without_title(slot)
         elif slot["frame"] == "plain":
             box = frames.tooltip(ctx, box)

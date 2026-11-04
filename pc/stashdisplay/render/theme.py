@@ -29,6 +29,7 @@ TITLE = "#E6D5A5"          # header text
 LABEL = "#A08A68"          # small labels and muted names in frames
 DEATH = "#C8402E"          # the death event card, and a map's deaths
 PORTAL = "#5A9BFF"         # a map's portals: the game's blue portal
+PROPERTY = "#7F7F7F"       # a property's name on an item tooltip ("Map Tier:")
 
 # League mechanics met in a map (docs/SCOPE.md §4b), each in its own colour from the game.
 MECHANIC_COLORS = {

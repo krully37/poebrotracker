@@ -18,12 +18,12 @@ from typing import Any
 
 from PIL import Image
 
-from . import draw
+from . import draw, frames
 from .data import DIV_KINDS, METRICS, RenderData, fmt_amount, fmt_clock, fmt_duration, fmt_metric
 from .draw import Ctx
 from .fonts import BUNDLED, FALLBACK, NAME_FAMILY, TITLE_FAMILY, fit, font, text_size
 from .templates import Box
-from .theme import (DEATH, FAINT, GOLD, LABEL, MUTED, PORTAL, SPARK, STALE, WHITE, item_color, mechanic_color,
+from .theme import (DEATH, FAINT, GOLD, LABEL, MUTED, PORTAL, PROPERTY, SPARK, STALE, WHITE, item_color, mechanic_color,
                     signed_color, tier_color)
 
 FRAMES = ["tooltip", "plain", "none"]
@@ -85,6 +85,14 @@ def slot_title(slot: dict) -> str:
     if kind == "stack_value":
         return "" if slot["label"] == "-" else (slot["label"] or slot["name"])
     return slot.get("title", "")
+
+
+def slot_header(slot: dict, data: RenderData) -> tuple[str, str | None]:
+    """The tooltip header's text and tint. The current-map card is a map's tooltip: its name, in its
+    tier's colour (docs/SCOPE.md §4b)."""
+    if slot["widget"] == "current_map" and data.current_map is not None:
+        return data.current_map.name, tier_color(data.current_map.tier)
+    return slot_title(slot), None
 
 
 def without_title(slot: dict) -> dict:
@@ -679,35 +687,65 @@ def render_media(ctx: Ctx, box: Box, o: dict) -> None:
 MAP_STATES = {"paused": ("Paused", STALE), "out": ("Outside the map", MUTED)}
 
 
-def map_tags(ctx: Ctx, box: Box, tags: list[str], f) -> None:
-    """Mechanic tags as small framed labels on one row, as many as fit, then "+2" for the rest."""
-    pad = max(3, f.size // 3)
-    x, right = box.x, box.x + box.w
-    for i, tag in enumerate(tags):
-        w = text_size(tag, f)[0] + 2 * pad
-        rest = len(tags) - i - 1
-        more_w = text_size(f"+{rest}", f)[0] + pad if rest else 0
-        if x + w + more_w > right:
-            more = f"+{len(tags) - i}"
-            draw.text_in(ctx, Box(int(x), box.y, max(1, int(right - x)), box.h), more, f, MUTED, "left")
-            return
-        # A pill in the mechanic's colour: a dim fill of it, then its border and text.
-        color = mechanic_color(tag)
-        shape = (x, box.y, x + w - 1, box.y + box.h - 1)
-        draw.paint(ctx, color, lambda d, s=shape: d.rounded_rectangle(s, radius=3, fill=255), alpha=46)
-        draw.paint(ctx, color, lambda d, s=shape: d.rounded_rectangle(s, radius=3, outline=255, width=1))
-        draw.text_in(ctx, Box(int(x + pad), box.y, int(w - 2 * pad) + 1, box.h), tag, f, color, "left")
-        x += w + pad
+def centered_line(ctx: Ctx, box: Box, parts: list[tuple[str, str]], f) -> None:
+    """One centred line made of differently coloured parts; parts that do not fit are left out."""
+    widths = [text_size(s, f)[0] for s, _ in parts]
+    while parts and sum(widths) > box.w:
+        parts, widths = parts[:-1], widths[:-1]
+    x = box.x + (box.w - sum(widths)) / 2
+    for (s, color), w in zip(parts, widths):
+        draw.text_in(ctx, Box(int(x), box.y, w + 1, box.h), s, f, color, "left")
+        x += w
+
+
+def mechanic_rows(tags: list[str], f, width: int, max_rows: int) -> list[list[str]]:
+    """The mechanics as the game lists a map's mods: one per line when there is room, else packed
+    several to a line, then "+2" for the rest."""
+    if max_rows < 1 or not tags:
+        return []
+    if len(tags) <= max_rows:
+        return [[t] for t in tags]
+    gap = text_size(MOD_GAP, f)[0]
+    rows: list[list[str]] = [[]]
+    used = 0
+    for tag in tags:
+        w = text_size(tag, f)[0]
+        if rows[-1] and used + gap + w > width:
+            rows.append([])
+            used = 0
+        used += (gap if rows[-1] else 0) + w
+        rows[-1].append(tag)
+    if len(rows) <= max_rows:
+        return rows
+    rows = rows[:max_rows]
+    shown = sum(len(r) for r in rows)
+    last = rows[-1]
+    while last:
+        more = f"+{len(tags) - shown}"
+        if text_size(MOD_GAP.join([*last, more]), f)[0] <= width:
+            break
+        last.pop()
+        shown -= 1
+    last.append(f"+{len(tags) - shown}")
+    return rows
+
+
+MOD_GAP = "    "
+TIMER_MIN = 52
 
 
 @widget("current_map", "Current map", "The map being run, or the last one: its name, tier, a live timer, deaths, "
-        "portals and the league mechanics met. Read from the game's log, Client.txt.", [
+        "portals and the league mechanics met. Read from the game's log, Client.txt. In a tooltip frame it looks "
+        "like the map's tooltip in the game.", [
     Option("title", "text", "Current map", "Title"),
     Option("mechanics", "bool", True, "Mechanics"),
 ])
 def render_current_map(ctx: Ctx, box: Box, o: dict) -> None:
-    box = list_title(ctx, box, o["title"])
     cur = ctx.data.current_map
+    # In a tooltip frame the header already shows the map's name (slot_header).
+    named = cur is not None and o.get("frame") == "tooltip"
+    if not named:
+        box = list_title(ctx, box, o["title"])
     if cur is None:
         empty(ctx, box, "No map yet")
         return
@@ -718,45 +756,54 @@ def render_current_map(ctx: Ctx, box: Box, o: dict) -> None:
         f = fit(line, NAME_FAMILY, 400, box.w, int(box.h * 0.75), max_size=22)
         draw.text_in(ctx, box, draw.truncate(line, f, box.w), f, WHITE, "left", "middle")
         return
-    gap = 4
-    line_h = int(min(24, max(12, box.h * 0.2)))
-    small_h = int(min(16, max(10, box.h * 0.13)))
-    # Name and tier.
-    tf = font(NUMBER_FAMILY, line_h, 700)
-    tier_w = text_size(cur.tier, tf)[0]
-    draw.text_in(ctx, Box(box.x + box.w - tier_w, box.y, tier_w, line_h), cur.tier, tf, tier_color(cur.tier), "right")
-    nf = font(NAME_FAMILY, line_h + 1, 400)
-    name_w = box.w - tier_w - 8
-    draw.text_in(ctx, Box(box.x, box.y, name_w, line_h), draw.truncate(cur.name, nf, name_w), nf, WHITE, "left")
-    # Deaths and portals at the bottom, the tags above them when there is room.
+    small_h = int(min(16, max(10, box.h * 0.12)))
     sf = font(NAME_FAMILY, small_h, 400)
-    info_y = box.y + box.h - small_h
-    info_parts = [("Deaths ", MUTED), (str(cur.deaths), DEATH if cur.deaths else MUTED), ("  ·  Portals ", MUTED),
-                  (str(cur.portals), PORTAL)]
-    x = box.x
-    for part, color in info_parts:
-        w = text_size(part, sf)[0]
-        if x + w > box.x + box.w:
-            break
-        draw.text_in(ctx, Box(int(x), info_y, w + 1, small_h), part, sf, color, "left")
-        x += w
-    timer_top, timer_bottom = box.y + line_h + gap, info_y - gap
+    top, bottom = box.y, box.y + box.h
+    if not named:
+        # Without the header, the name heads the card, in its tier's colour.
+        line_h = int(min(22, max(12, box.h * 0.17)))
+        nf = font(TITLE_FAMILY, line_h, 400)
+        draw.text_in(ctx, Box(box.x, top, box.w, line_h), draw.truncate(cur.name, nf, box.w), nf,
+                     tier_color(cur.tier), "center")
+        top += line_h + 4
+    # Properties, as on the map's tooltip: grey names, coloured values.
+    level = cur.tier[1:] if cur.tier.startswith("T") else cur.tier.removeprefix("Level ")
+    centered_line(ctx, Box(box.x, top, box.w, small_h), [
+        ("Map Tier: " if cur.tier.startswith("T") else "Area Level: ", PROPERTY), (level, WHITE),
+        (MOD_GAP + "Portals: ", PROPERTY), (str(cur.portals), PORTAL),
+        (MOD_GAP + "Deaths: ", PROPERTY), (str(cur.deaths), DEATH if cur.deaths else WHITE),
+    ], sf)
+    top += small_h + 4
+    frames.separator(ctx, box.x, box.x + box.w, top, tier_color(cur.tier))
+    top += 5
+    # The mechanics at the bottom, under another separator, as the map's mods.
     tags = cur.mechanics if o["mechanics"] else []
-    tag_h = small_h + 4
-    if tags and timer_bottom - tag_h - gap - timer_top >= line_h:
-        map_tags(ctx, Box(box.x, timer_bottom - tag_h, box.w, tag_h), tags, font(NAME_FAMILY, small_h - 1, 400))
-        timer_bottom -= tag_h + gap
-    # The live timer, with "Paused" or "Outside the map" beside it.
-    timer_box = Box(box.x, timer_top, box.w, max(1, timer_bottom - timer_top))
     state, state_color = MAP_STATES.get(cur.state, ("", WHITE))
+    row_h = small_h + 3
+    # The timer keeps at least TIMER_MIN px (and its state line); mechanics get what is left, and
+    # one row anyway while the timer can still be 36 px.
+    room = bottom - top - (small_h if state else 0) - 9
+    max_rows = max((room - TIMER_MIN) // row_h, 1 if room - 36 >= row_h else 0)
+    lines = mechanic_rows(tags, sf, box.w, max_rows)
+    if lines:
+        bottom -= len(lines) * row_h
+        for i, row in enumerate(lines):
+            parts: list[tuple[str, str]] = []
+            for j, tag in enumerate(row):
+                parts += [(MOD_GAP, WHITE)] if j else []
+                parts.append((tag, MUTED if tag.startswith("+") else mechanic_color(tag)))
+            centered_line(ctx, Box(box.x, bottom + i * row_h + 2, box.w, small_h), parts, sf)
+        bottom -= 5
+        frames.separator(ctx, box.x, box.x + box.w, bottom, tier_color(cur.tier))
+        bottom -= 4
+    # The live timer in the middle, with "Paused" or "Outside the map" under it.
     if state:
-        state_w = text_size(state, sf)[0]
-        if state_w <= box.w * 0.45:
-            draw.text_in(ctx, Box(box.x + box.w - state_w, timer_box.y, state_w, timer_box.h), state, sf, state_color, "right")
-            timer_box = Box(box.x, timer_box.y, box.w - state_w - 8, timer_box.h)
+        bottom -= small_h
+        draw.text_in(ctx, Box(box.x, bottom, box.w, small_h), state, sf, state_color, "center")
+    timer_box = Box(box.x, top, box.w, max(1, bottom - top))
     # Fitted on 8s, so the size does not jump as the digits change.
     big = fit(re.sub(r"\d", "8", timer), NUMBER_FAMILY, 700, timer_box.w, timer_box.h, max_size=90)
-    draw.text_in(ctx, timer_box, timer, big, WHITE if cur.state == "running" else MUTED, "left", "middle")
+    draw.text_in(ctx, timer_box, timer, big, WHITE if cur.state == "running" else MUTED, "center", "middle")
 
 
 @widget("clock", "Clock", "The time, optionally with the date.", [
