@@ -48,6 +48,24 @@ refaites ces étapes.
 - Quand le PC est inactif depuis 10 minutes, un chat rebondit sur l'écran ; touchez-le pour
   retrouver les pages.
 
+## 4. Cartes
+
+La page **Maps** (la dernière page) suit vos cartes, lues dans le même journal du jeu.
+
+- **La carte en cours** : son nom, son palier, un chrono, les mécaniques de ligue croisées (Einhar,
+  Alva, Délire...), vos morts et vos portails. Les zones annexes (Abysse, zone vaal, épreuves)
+  comptent dans la carte.
+- **Le chrono** ne compte que le temps dans la carte. Il affiche **Paused** après 10 secondes sans
+  toucher au clavier ni à la souris, et **Outside the map** quand vous êtes dans votre repaire.
+- **Les cartes de la session** (celles du jour en dessous), les cartes par heure, le temps moyen
+  par carte et les **div par carte** (le gain de session divisé par les cartes). Gardez le doigt
+  sur le nombre de cartes pour commencer une nouvelle session.
+- **De retour au repaire après une carte**, le programme synchronise WealthyExile tout seul (au
+  plus une fois toutes les 5 minutes) : les div par carte restent à jour sans toucher l'écran. Cela
+  se désactive dans la page de réglages, sous **Suivi des cartes**.
+- Si le programme démarre alors que vous êtes déjà dans une carte, le chrono attend que vous
+  changiez de zone.
+
 Vos pages, fonds (images, GIF, vidéos) et animations se modifient tous dans la page de réglages,
 avec un aperçu en direct.
 
@@ -57,7 +75,8 @@ avec un aperçu en direct.
 |---|---|
 | « Waiting for the PC » | Le programme ne tourne pas, ou le câble est débranché. Lancez `StashDisplay.exe`. |
 | « PC disconnected » (assombri) | Le programme s'est arrêté ou le câble a été retiré. Relancez-le ou rebranchez le câble. |
-| De vieux chiffres (« synced ... ago » ne cesse d'augmenter) | Votre cookie WealthyExile a expiré : collez-en un nouveau (partie 2). |
+| « stale · 20m ago » (la durée augmente) | WealthyExile n'a pas pu être lu depuis 15 minutes. Ouvrez la page de réglages et survolez le badge en haut à droite : il dit pourquoi. **Cookie expired** : collez-en un nouveau (partie 2). **WealthyExile unavailable** : le site est en panne ou demande une vérification ; attendez, il réessaie toutes les 5 minutes. **WealthyExile changed** : le site a changé ; envoyez le journal (ci-dessous). |
+| « waiting for data » | WealthyExile n'a pas encore été lu : vérifiez le cookie (partie 2). |
 
 Le programme écrit un journal dans `%APPDATA%\stashdisplay\stashdisplay.log` : envoyez-le si vous
 demandez de l'aide (il ne contient jamais votre cookie).

@@ -24,3 +24,6 @@ Thumbs.db
 preview/
 *.egg-info/
 firmware/bench_data/
+
+# Owner's own photos and videos (sources for the built-in animations): never commit
+images/

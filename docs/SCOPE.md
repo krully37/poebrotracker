@@ -202,7 +202,7 @@ Idea from Exile UI (Lailloken/Exile-UI, MIT, an AutoHotkey overlay): its map tra
 - **League** (decided 2026-10-27): there is no league setting. The friend plays the current softcore trade league. Until WealthyExile is read (step 7), poe.ninja prices use the first league in poe.ninja's list, which is the current softcore trade one. After that, prices follow the league WealthyExile reports, so the two can never disagree, including in the first hours of a new league.
 - **poe.ninja**: official economy endpoints, used for the item-price widget and the divine price fallback. It sends a descriptive User-Agent, respects the cache and ETags, and polls at most every 30 min. Note: poe.ninja's docs ask desktop apps to proxy through their own backend. We accept that small deviation at this request rate.
 - **History**: a local file in `%APPDATA%\stashdisplay`, which survives restarts. It feeds div/h, the sparkline, session, league-start and day stats.
-- **XP/hour** (wanted, not scheduled yet): `Client.txt` only logs level-ups, not experience. GGG's official API returns each character's `experience` (`GET /character`, scope `account:characters`), and desktop apps may use it as a "public client" (OAuth with PKCE and a local redirect). This needs the app registered with GGG, and the friend logging in to his PoE account once to approve it. To be decided before step 7.
+- **XP/hour** (wanted, not scheduled yet): `Client.txt` only logs level-ups, not experience. GGG's official API returns each character's `experience` (`GET /character`, scope `account:characters`), and desktop apps may use it as a "public client" (OAuth with PKCE and a local redirect). This needs the app registered with GGG, and the friend logging in to his PoE account once to approve it. Not in v1: set aside until after the hand-over (2026-11-04).
 
 ## 7. Delivery
 
@@ -277,7 +277,7 @@ Decided 2026-10-29.
 - USB serial: Arduino's `Serial` (HWCDC) pushes each received byte through a FreeRTOS queue from its interrupt and **drops bytes** when the queue is full (143 kB of 200 kB arrived). The firmware uses its own driver (`firmware/lib/board/usblink.h`), reading the USB FIFO directly, so the PC simply waits when the screen is busy.
 - **Closing the COM port resets the board** (the USB-Serial/JTAG reset lines), and so does opening it with DTR/RTS off; opening it with pyserial's defaults does not. Fixed in step 6: the app drops RTS, then DTR, before closing, so Quit or a reconnect leaves the screen running (§8b).
 - USB on the board: **settled 2026-10-29, native USB.** The USB-C port goes straight to the ESP32-S3's USB-Serial/JTAG (`VID_303A&PID_1001`, no CH340). Windows 11 loads its built-in USB serial driver on its own (COM port plus a "USB JTAG/serial debug unit"), so the friend installs no driver. Transfer speed: see the speeds below.
-- XP/hour: register an app with GGG's developer program (see §6), and whether that registration is approved.
+- XP/hour (after the hand-over, §6): register an app with GGG's developer program, and whether that registration is approved.
 
 ## 10. Build order
 

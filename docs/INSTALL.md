@@ -42,6 +42,22 @@ logs you out (about once a month), the screen's data stops updating: do these st
   program never touches the game itself.
 - When the PC is idle for 10 minutes, a cat bounces on the screen; touch it to get the pages back.
 
+## 4. Maps
+
+The **Maps** page (swipe to the last page) follows your maps, read from the same game log.
+
+- **The current map**: its name, tier, a timer, the league mechanics met (Einhar, Alva,
+  Delirium...), your deaths and portals. Side areas (Abyss, Vaal area, trials) count as part of the
+  map.
+- **The timer** counts only time inside the map. It shows **Paused** after 10 seconds without
+  touching the keyboard or mouse, and **Outside the map** while you are in your hideout.
+- **Maps this session** (today's under it), maps per hour, average map time and **div per map**
+  (the session gain divided by the maps). Hold your finger on the map count to start a new session.
+- **Back in your hideout after a map**, the program syncs WealthyExile by itself (at most once every
+  5 minutes), so div per map stays current without tapping. It can be turned off in the settings
+  page, under **Map tracker**.
+- If the program starts while you are already in a map, the timer waits until you change area.
+
 Your pages, backgrounds (images, GIFs, videos) and animations are all edited in the settings
 page, with a live preview.
 
@@ -51,7 +67,8 @@ page, with a live preview.
 |---|---|
 | "Waiting for the PC" | The program is not running, or the cable is unplugged. Start `StashDisplay.exe`. |
 | "PC disconnected" (dim) | The program stopped or the cable was pulled. Start it again or replug the cable. |
-| Old numbers ("synced ... ago" keeps growing) | Your WealthyExile cookie has expired: paste a new one (part 2). |
+| "stale · 20m ago" (the time keeps growing) | WealthyExile could not be read for 15 minutes. Open the settings page and hover the badge at the top right: it says why. **Cookie expired**: paste a new one (part 2). **WealthyExile unavailable**: the site is down or asks for a check; wait, it retries every 5 minutes. **WealthyExile changed**: the site changed; send the log (below). |
+| "waiting for data" | WealthyExile has not been read yet: check the cookie (part 2). |
 
 The program writes a log at `%APPDATA%\stashdisplay\stashdisplay.log`: send it if you ask for help
 (it never contains your cookie).
