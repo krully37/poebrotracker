@@ -12,6 +12,8 @@ on:
 jobs:
   windows-app:
     runs-on: windows-latest
+    permissions:
+      contents: write  # the release for a tag; the repo's default token is read-only
     defaults:
       run:
         working-directory: pc
