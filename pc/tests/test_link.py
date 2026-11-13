@@ -395,3 +395,23 @@ def test_backgrounds_become_screen_files(tmp_path):
         assert (im.format, im.size, im.n_frames) == ("GIF", (480, 320), 2)
     assert "file" not in content.pages[2].bg  # missing media falls back to a colour
     assert [z["action"] for z in content.pages[0].zones] == ["reset_rate"]
+
+
+def test_only_the_screens_own_usb_id_is_opened_when_looking_for_it(monkeypatch):
+    """Opening a serial port can restart what is behind it, and the search runs every 2 s."""
+    from collections import namedtuple
+
+    from serial.tools import list_ports
+
+    from stashdisplay.link.transport import candidate_ports
+
+    Listed = namedtuple("Listed", "device vid pid")
+    monkeypatch.setattr(list_ports, "comports", lambda: [
+        Listed("COM3", 0x1A86, 0x7523),  # a CH340: an Arduino, a 3D printer
+        Listed("COM4", 0x10C4, 0xEA60),  # a CP210x
+        Listed("COM5", 0x303A, 0x1001),  # the screen: the ESP32-S3's USB-Serial/JTAG
+        Listed("COM6", 0x303A, 0x4001),  # another Espressif device
+        Listed("COM1", None, None),  # a motherboard port
+    ])
+    assert candidate_ports() == ["COM5"]
+    assert candidate_ports("COM3") == ["COM3"]  # a port set in the settings is used as it is

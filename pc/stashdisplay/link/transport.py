@@ -6,12 +6,11 @@ from typing import Protocol
 
 from . import protocol as p
 
-# USB vendor ids of the bridges an ESP32-S3 board can show up as.
-SCREEN_VIDS = {
-    0x303A,  # Espressif native USB (USB-Serial/JTAG)
-    0x1A86,  # WCH CH340 / CH343
-    0x10C4,  # Silicon Labs CP210x
-}
+# What the screen shows up as: the ESP32-S3's own USB-Serial/JTAG (docs/SCOPE.md §9). Only that
+# one is opened when looking for the screen. Opening a serial port can restart what is behind it
+# (an Arduino, a 3D printer), and the search runs every 2 s, so other USB-serial bridges (CH340,
+# CP210x) are left alone; a screen behind one of those needs its port set in `serial.port`.
+SCREEN_USB_ID = (0x303A, 0x1001)
 
 
 class Port(Protocol):
@@ -61,12 +60,12 @@ class SerialPort:
 
 
 def candidate_ports(configured: str = "") -> list[str]:
-    """Serial ports that may be the screen: the configured one, else known USB bridges."""
+    """Serial ports that may be the screen: the configured one, else those with the screen's USB id."""
     if configured:
         return [configured]
     from serial.tools import list_ports
 
-    return [port.device for port in list_ports.comports() if port.vid in SCREEN_VIDS]
+    return [port.device for port in list_ports.comports() if (port.vid, port.pid) == SCREEN_USB_ID]
 
 
 class _End:
