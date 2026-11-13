@@ -59,7 +59,15 @@ struct State {
   // Bumped on every change the display should redraw for.
   uint32_t version = 0;
 
-  bool online(uint32_t now) const { return everHeard && now - lastRxMs < proto::kOfflineAfterMs; }
+  // `now` may be a moment older than lastRxMs: the display reads the clock, then waits for the
+  // lock, and the link task can note a frame in between. Unsigned, that tiny negative age is 49
+  // days, which showed "PC disconnected" for a frame and sent the idle cat away. A frame up to
+  // kClockSlackMs "in the future" is a frame just received.
+  static constexpr int32_t kClockSlackMs = 1000;
+  bool online(uint32_t now) const {
+    int32_t age = (int32_t)(now - lastRxMs);
+    return everHeard && age > -kClockSlackMs && age < (int32_t)proto::kOfflineAfterMs;
+  }
 };
 
 extern State state;

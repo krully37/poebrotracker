@@ -260,6 +260,7 @@ Decided 2026-10-29.
   - The framing is also unit-tested on the PC (`pio test -e native`).
 - **Flash:** one 3 MB app partition, no over-the-air updates (the owner flashes by USB); LittleFS gets the rest, about 12.9 MB.
 - **Two cores:** core 0 runs the USB link (read, ACK, write to flash); core 1 runs the display (touch, compositing, animations). Overlays stay compressed in PSRAM; the current page and its two neighbours are kept unpacked (~1.2 MB), so a swipe starts at once.
+- **The "is the PC there" check and the two cores (2026-11-13, found in a review, never seen on the screen):** the display reads the clock, then waits for the shared state's lock; the link task could note a frame in between, and that frame's time was then later than the display's clock. As unsigned numbers that is 49 days of silence: "PC disconnected" for one frame, and the idle cat sent away until the PC next said "idle". A frame up to 1 s "in the future" now counts as just received (`firmware/src/state.h`). It compiles and the native tests pass; **not flashed or tried on the screen yet**.
 - **Closing the COM port resets the board** (§9). Fixed on the PC side (2026-10-29): `transport.py` drops RTS, then DTR, before closing, and the screen keeps running. Only an app that is killed (or crashes) still resets it, because Windows then closes the port the plain way; the screen then plays the boot animation and waits for the PC.
 
 ## 9. Open questions
