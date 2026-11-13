@@ -30,3 +30,58 @@ def test_offline_cache_never_downloads(tmp_path):
     assert cache.icon_index() == {}
     assert cache.icon("Divine Orb") is None
     assert cache.fontin() == {}
+
+
+class IconReply:
+    def __init__(self, status=200, content_type="image/png"):
+        self.status_code, self.ok, self.content = status, status < 400, b"png"
+        self.headers = {"content-type": content_type}
+
+
+def icon_cache(tmp_path, answer):
+    """A cache that knows two icons, with a clock the test moves and a fake image server."""
+    import json
+
+    (tmp_path / "icon-index.json").write_text(json.dumps({
+        "fetched": 9e12, "league": "Allflame", "names": {}, "kinds": {},
+        "icons": {"divine orb": "https://x/divine.png", "mageblood": "https://x/mb.png"},
+    }), encoding="utf-8")
+    cache = AssetCache(root=tmp_path, offline=False)
+    cache.now, cache.asked = 1000.0, []
+    cache.clock = lambda: cache.now
+
+    def get(url, timeout=None):
+        cache.asked.append(url)
+        return answer(url)
+
+    cache.http.get = get
+    return cache
+
+
+def test_an_icon_the_server_does_not_have_is_not_asked_for_at_every_render(tmp_path):
+    from stashdisplay.assets import ICON_RETRY_MISSING
+
+    cache = icon_cache(tmp_path, lambda url: IconReply(200) if "divine" in url else IconReply(404, "text/html"))
+    for _ in range(50):  # fifty renders
+        assert cache.icon("Mageblood") is None
+    assert cache.asked == ["https://x/mb.png"]
+    assert cache.icon("Divine Orb").exists() and len(cache.asked) == 2  # the others still download
+    cache.now += ICON_RETRY_MISSING
+    assert cache.icon("Mageblood") is None and len(cache.asked) == 3  # asked again hours later
+
+
+def test_no_icon_is_asked_for_while_the_image_server_does_not_answer(tmp_path):
+    import requests
+
+    from stashdisplay.assets import ICON_RETRY_DOWN
+
+    def down(url):
+        raise requests.ConnectionError("no route")
+
+    cache = icon_cache(tmp_path, down)
+    for _ in range(50):
+        assert cache.icon("Mageblood") is None and cache.icon("Divine Orb") is None
+    assert len(cache.asked) == 1  # one timeout, not one per icon and per render
+    cache.now += ICON_RETRY_DOWN
+    cache.http.get = lambda url, timeout=None: IconReply(200)  # the network is back
+    assert cache.icon("Mageblood").exists() and cache.icon("Divine Orb").exists()

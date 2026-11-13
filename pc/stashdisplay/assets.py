@@ -31,6 +31,8 @@ DIVINATION_CARD_ICON = f"{CDN}/image/Art/2DItems/Divination/InventoryIcon.png"
 FONTIN_URL = "https://www.exljbris.com/dl/fontin2_pc.zip"
 FONTIN_FILES = {"Fontin-Regular.ttf", "Fontin-Bold.ttf", "Fontin-SmallCaps.ttf", "Fontin-Italic.ttf"}
 INDEX_MAX_AGE = 7 * 24 * 3600
+ICON_RETRY_DOWN = 60  # seconds without asking for any icon after the image server did not answer
+ICON_RETRY_MISSING = 6 * 3600  # seconds before asking again for an icon the server answered without
 
 # (endpoint, type) pairs whose responses carry icon links.
 EXCHANGE_TYPES = [
@@ -103,6 +105,9 @@ class AssetCache:
         self._index: dict[str, str] | None = None
         self._names: dict[str, str] = {}
         self._kinds: dict[str, list[str]] = {}  # lower-case name -> [endpoint, type]: its poe.ninja list
+        self.clock = time.monotonic
+        self._icons_down_until = 0.0  # no answer from the image server: no icon is asked for until then
+        self._icon_retry: dict[str, float] = {}  # icon URL -> when to ask for it again
 
     # --- Icons ---------------------------------------------------------------
 
@@ -182,19 +187,27 @@ class AssetCache:
         path = self.root / "icons" / (hashlib.sha1(url.encode()).hexdigest()[:16] + ".png")
         if path.exists():
             return path
-        if self.offline:
+        now = self.clock()
+        # A download that failed is not tried again at every render (pages are drawn each minute,
+        # and each second with the map timer): that would hammer the image server and hold up the
+        # drawing for the length of each timeout.
+        if self.offline or now < self._icons_down_until or now < self._icon_retry.get(url, 0.0):
             return None
         for candidate in filter(None, (art_url(url), url)):
             try:
                 r = self.http.get(candidate, timeout=15)
-                r.raise_for_status()
             except requests.RequestException as e:
-                log.warning("Could not download the icon for %s from %s: %s", name, candidate, e)
-                continue
-            if r.headers.get("content-type", "").startswith("image/"):
+                # No answer: the network or the image server is down, for every icon alike.
+                log.warning("Could not download the icon for %s: %s; no icon is asked for %d s",
+                            name, type(e).__name__, ICON_RETRY_DOWN)
+                self._icons_down_until = now + ICON_RETRY_DOWN
+                return None
+            if r.ok and r.headers.get("content-type", "").startswith("image/"):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(r.content)
                 return path
+            log.warning("No icon for %s at %s: HTTP %s", name, candidate, r.status_code)
+        self._icon_retry[url] = now + ICON_RETRY_MISSING  # the server answered, without this image
         return None
 
     # --- Fontin --------------------------------------------------------------
