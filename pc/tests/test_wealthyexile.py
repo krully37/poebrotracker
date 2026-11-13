@@ -10,6 +10,12 @@ from stashdisplay.sources.base import AuthError, SourceError
 FAKE_JWT = "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VybmFtZSI6ImZha2UifQ.c2lnbmF0dXJlLWZha2U"
 
 
+@pytest.fixture(autouse=True)
+def no_action_kept(monkeypatch):
+    """Each test starts without a sync action remembered from another one."""
+    monkeypatch.setattr(we, "_action", None)
+
+
 def page(data: dict, split: int = 3) -> str:
     """An HTML page whose Next.js payload holds `data`, cut over several pushes like the real one."""
     text = "1:" + json.dumps(data, separators=(",", ":")) + "\n"
@@ -154,6 +160,46 @@ def test_sync_sends_what_the_sites_button_sends():
     assert json.loads(body) == [10, "$D2026-10-29T20:08:00.000Z", "$D2025-01-01T21:20:33.000Z"]
     with pytest.raises(SourceError):
         we.sync_action("<html></html>", site)
+
+
+def test_sync_reads_the_sites_scripts_once_per_deployment():
+    """Polite polling: the action's id is kept with the site version, not looked up at every sync."""
+    action = {"v1": "40" + "ab" * 20, "v2": "40" + "cd" * 20}
+
+    class Site:
+        def __init__(self):
+            self.version, self.status, self.scripts, self.posted = "v1", 200, 0, []
+
+        def html(self):
+            return page(data()).replace("<html>", f'<html><script src="/_next/static/chunks/a-1.js?dpl={self.version}" async="">'
+                                        '</script><script>self.__next_f.push([1,"static/chunks/app/stash/page-9z.js"])</script>')
+
+        def get(self, url, headers=None, **_):
+            if not url.endswith(".js"):
+                return Reply(text=self.html())
+            self.scripts += 1
+            found = f'(0,r.createServerReference)("{action[self.version]}",n.callServer,void 0,n.findSourceMapURL,"syncUser")'
+            return Reply(text=found if url.endswith("page-9z.js") else "")
+
+        def post(self, url, data, headers, **_):
+            self.posted.append(headers["Next-Action"])
+            return Reply(status=self.status)
+
+    site = Site()
+    we.sync("a=b", site)
+    read_once = site.scripts
+    we.sync("a=b", site)
+    we.sync("a=b", site)
+    assert read_once == 2 and site.scripts == read_once  # both scripts once, then none
+    site.version = "v2"  # the site was deployed again: its action has a new id
+    we.sync("a=b", site)
+    assert site.scripts == 2 * read_once and site.posted == [action["v1"]] * 3 + [action["v2"]]
+    site.status = 500  # a sync turned down: the id is read again next time, in case it was the trouble
+    with pytest.raises(SourceError):
+        we.sync("a=b", site)
+    site.status = 200
+    we.sync("a=b", site)
+    assert site.scripts == 3 * read_once
 
 
 def test_an_expired_cookie_shows_on_the_screen_and_stops_polling_until_a_new_one(tmp_path, monkeypatch):

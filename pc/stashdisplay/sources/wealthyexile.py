@@ -168,12 +168,29 @@ def sync_action(html: str, session=None) -> str:
     raise SourceError(CHANGED, "no syncUser action")
 
 
+# The action's id only changes when the site is deployed again, so it is kept (in memory) with the
+# site version it was read from: the scripts are downloaded once per deployment and per start of
+# the app, not at every sync (polite polling, CLAUDE.md).
+_action: tuple[object, str] | None = None
+
+
+def _site_version(html: str) -> object:
+    """What tells one deployment of the site from the next: its deployment id, else the names of
+    its scripts (each carries a hash of its content)."""
+    found = _DEPLOYMENT.search(html)
+    return found.group(1) if found else tuple(dict.fromkeys(_SCRIPT.findall(html)))
+
+
 def sync(cookie: str, session=None) -> None:
     """Sync the stash on WealthyExile, as its button does. Its reply is dropped unread: it can carry
     the session itself."""
+    global _action
     html = fetch_page(cookie, session)
     args = _as_expected(lambda: sync_args(payload(html)))
-    action = sync_action(html, session)
+    version = _site_version(html)
+    if _action is None or _action[0] != version:
+        _action = (version, sync_action(html, session))
+    action = _action[1]
     headers = {"Cookie": cookie, "User-Agent": USER_AGENT, "Accept": "text/x-component",
                "Next-Action": action, "Content-Type": "text/plain;charset=UTF-8"}
     deployment = _DEPLOYMENT.search(html)  # the site version, as the page sends it
@@ -188,6 +205,7 @@ def sync(cookie: str, session=None) -> None:
     if r.status_code in (301, 302, 303, 307, 308, 401):
         raise AuthError("Cookie expired")
     if r.status_code != 200:
+        _action = None  # in case the id was the trouble: the next sync reads it again
         raise SourceError(UNAVAILABLE, f"sync: HTTP {r.status_code}")
 
 
