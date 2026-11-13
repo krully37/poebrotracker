@@ -46,6 +46,17 @@ def log_path() -> Path:
     return app_dir() / "stashdisplay.log"
 
 
+def set_aside(path: Path) -> Path | None:
+    """Moves a file that cannot be read out of the way, as "<name>.broken.<ext>" beside it, so the
+    app can start again without it and nothing is lost for good. None if it could not be moved."""
+    broken = path.with_name(f"{path.stem}.broken{path.suffix}")
+    try:
+        os.replace(path, broken)
+    except OSError:
+        return None
+    return broken
+
+
 def dump_dir() -> Path:
     path = app_dir() / "dumps"
     path.mkdir(exist_ok=True)

@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import re
 import time
 import zipfile
@@ -117,17 +118,20 @@ class AssetCache:
 
     def league(self) -> str:
         """The current softcore trade league, as poe.ninja lists it (from the cached index)."""
+        return self._read_index().get("league", "")
+
+    def _read_index(self) -> dict:
+        """The cached index, or {} when there is none or it cannot be read (it is then fetched again)."""
         try:
-            return json.loads(self.index_path.read_text(encoding="utf-8")).get("league", "")
+            cached = json.loads(self.index_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return ""
+            return {}
+        return cached if isinstance(cached, dict) else {}
 
     def icon_index(self) -> dict[str, str]:
         if self._index is not None:
             return self._index
-        cached = {}
-        if self.index_path.exists():
-            cached = json.loads(self.index_path.read_text(encoding="utf-8"))
+        cached = self._read_index()
         # An index from before item prices lacks "kinds": fetch it again once.
         fresh = time.time() - cached.get("fetched", 0) < INDEX_MAX_AGE and "kinds" in cached
         if not fresh and not self.offline:
@@ -175,7 +179,10 @@ class AssetCache:
             time.sleep(0.5)  # be gentle: this runs about once a week
         data = {"fetched": time.time(), "league": league, "icons": icons, "names": names, "kinds": kinds}
         self.root.mkdir(parents=True, exist_ok=True)
-        self.index_path.write_text(json.dumps(data), encoding="utf-8")
+        # Write then rename, so a crash or power cut never leaves a half-written index.
+        tmp = self.index_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        os.replace(tmp, self.index_path)
         log.info("Icon index refreshed: %d items (%s)", len(icons), league)
         return data
 

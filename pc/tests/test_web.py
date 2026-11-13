@@ -200,3 +200,22 @@ def test_event_test_button_covers_screen_and_game_start(client, app):
         assert r.status_code == 200 and r.get_json() == {"played": False}  # no screen in this test
     assert client.post("/api/events/test", json={"kind": "nope"}, headers=WRITE).status_code == 400
     assert set(app.store.settings["events"]) == {"client_log", "boot", "launch", "levelup", "death", "lastportal"}
+
+
+def test_an_unreadable_settings_file_does_not_stop_the_app(tmp_path):
+    """The .exe has no window to say why it did not start: it starts with the defaults instead,
+    and keeps the file it could not read beside the new one."""
+    path = tmp_path / "settings.json"
+    path.write_text('{"settings": {"language": "fr"}, "pages": [', encoding="utf-8")  # cut short
+    store = Store.load(path)
+    assert store.settings["language"] == "en" and [p["id"] for p in store.pages] == [p["id"] for p in pagelib.preset()]
+    assert (tmp_path / "settings.broken.json").read_text(encoding="utf-8").startswith('{"settings": {"language": "fr"}')
+    assert json.loads(path.read_text(encoding="utf-8"))["version"] == 2  # a good file again
+
+    # Valid JSON with values of the wrong kind: each falls back on its own, the rest is kept.
+    path.write_text(json.dumps({"version": "2", "settings": {"language": "fr"}, "pages": "none", "cookie": "a=b",
+                                "token": 5}), encoding="utf-8")
+    store = Store.load(path)
+    assert store.settings["language"] == "fr" and store.pages and store.cookie == "" and isinstance(store.token, str)
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    assert Store.load(path).pages

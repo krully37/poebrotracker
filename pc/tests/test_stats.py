@@ -68,3 +68,15 @@ def test_history_round_trip_and_league_start(tmp_path):
     assert h2.points == [(1000, 10.0), (1300, 12.0)]
     assert h2.session_start == 1250
     assert h2.league_starts == {"Mercenaries": (1000, 10.0)}
+
+
+def test_an_unreadable_history_starts_again_and_keeps_the_file(tmp_path):
+    path = tmp_path / "history.json"
+    for broken in ('{"points": [[1, 2], [3', '{"points": [["soon", 2]]}', "[1, 2]"):
+        path.write_text(broken, encoding="utf-8")
+        h = History.load(path)
+        assert h.points == [] and h.path == path
+        assert (tmp_path / "history.broken.json").read_text(encoding="utf-8") == broken
+    h.add(1000.0, 5.0, "Allflame")
+    h.save()
+    assert History.load(path).points == [(1000.0, 5.0)]

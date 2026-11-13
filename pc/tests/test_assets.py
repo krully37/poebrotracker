@@ -85,3 +85,10 @@ def test_no_icon_is_asked_for_while_the_image_server_does_not_answer(tmp_path):
     cache.now += ICON_RETRY_DOWN
     cache.http.get = lambda url, timeout=None: IconReply(200)  # the network is back
     assert cache.icon("Mageblood").exists() and cache.icon("Divine Orb").exists()
+
+
+def test_an_unreadable_icon_index_is_no_index(tmp_path):
+    for broken in ('{"icons": {"divine orb": "https://x/d', "[1, 2]"):
+        (tmp_path / "icon-index.json").write_text(broken, encoding="utf-8")
+        cache = AssetCache(root=tmp_path, offline=True)
+        assert cache.league() == "" and cache.icon_index() == {} and cache.kind("Divine Orb") is None

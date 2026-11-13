@@ -6,6 +6,7 @@ on load and on save, so a hand-edited or old file never breaks the app.
 
 import copy
 import json
+import logging
 import os
 import secrets
 import sys
@@ -13,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import pages as pagelib
-from . import vault
+from . import paths, vault
+
+log = logging.getLogger(__name__)
 
 VERSION = 2  # of settings.json; Store.upgrade() brings older files up to date
 LANGUAGES = ["en", "fr"]
@@ -110,17 +113,32 @@ class Store:
             store = cls(path=path)
             store.save()
             return store
-        data = json.loads(path.read_text(encoding="utf-8"))
-        pages = [pagelib.normalize_page(p) for p in data.get("pages", [])] or pagelib.preset()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("not an object")
+        except (OSError, ValueError) as e:
+            # Cut short or edited by hand into something that is not JSON: the app must still
+            # start (the .exe has no window to say why it did not). The file is kept beside it.
+            kept = paths.set_aside(path)
+            log.warning("settings.json unreadable (%s), starting again with the defaults; the old file is %s",
+                        type(e).__name__, kept.name if kept else "still there")
+            store = cls(path=path)
+            store.save()
+            return store
+        listed = data.get("pages") if isinstance(data.get("pages"), list) else []
+        pages = [pagelib.normalize_page(p) for p in listed if isinstance(p, dict)] or pagelib.preset()
+        sealed, token = data.get("cookie"), data.get("token")
+        version = data.get("version") if isinstance(data.get("version"), int) else 1
         store = cls(
             path=path,
             settings=normalize_settings(data.get("settings", {})),
             pages=pages,
-            cookie=vault.unseal(data.get("cookie")),
-            token=data.get("token") or secrets.token_urlsafe(24),
+            cookie=vault.unseal(sealed if isinstance(sealed, dict) else None),
+            token=token if isinstance(token, str) and token else secrets.token_urlsafe(24),
         )
-        if data.get("version", 1) < VERSION:
-            store.upgrade(data.get("version", 1))
+        if version < VERSION:
+            store.upgrade(version)
             store.save()
         return store
 
