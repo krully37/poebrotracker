@@ -125,6 +125,7 @@ Decided 2026-10-27.
 **Access**
 - A **tray icon** next to the Windows clock shows the status (connected, last sync, errors). Its menu has Open settings, Refresh now, Start with Windows, and Quit.
 - The settings page opens in the browser. It is served on `127.0.0.1` only, and requests are checked so that other websites cannot change settings or read the cookie (a per-install token plus Host/Origin checks).
+- **A port already in use (2026-11-13):** before starting, the app looks at who answers on the settings port (47821). Its own "locked" page there means a copy is already running: that copy's settings page is opened and the new one leaves. Another program there means the next port is taken (up to 10 are tried), so the link carrying the token is never opened on a port the app does not serve. The check is made by connecting, not by the bind failing: on Windows a second server can bind a port another one is serving, so a second copy used to start beside the first.
 - The interface is in **English and French**, with a switch. All text comes from a translation file. Item names stay as the game names them.
 
 **Editor**

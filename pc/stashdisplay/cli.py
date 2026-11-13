@@ -149,10 +149,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     first_start = not paths.settings_path().exists()
     app = App.create(offline=args.offline)
     try:
-        web_server = server.serve_in_background(app)
-    except OSError:
-        # Most likely another copy is running: show its settings page and leave.
-        logging.info("settings port busy, opening the running copy")
+        web_server = server.start(app)
+    except OSError as e:
+        logging.error("cannot start: %s", e)
+        return 1
+    if web_server is None:
+        # Another copy is running: show its settings page and leave.
+        logging.info("already running, opening its settings page")
         tray.open_settings(app)
         return 0
     logging.info("settings page on %s", server.url(app).split("?")[0])

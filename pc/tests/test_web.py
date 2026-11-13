@@ -219,3 +219,34 @@ def test_an_unreadable_settings_file_does_not_stop_the_app(tmp_path):
     assert store.settings["language"] == "fr" and store.pages and store.cookie == "" and isinstance(store.token, str)
     path.write_text("[1, 2, 3]", encoding="utf-8")
     assert Store.load(path).pages
+
+
+def test_a_port_in_use_is_never_given_the_token_and_a_running_copy_is_found(app, tmp_path):
+    """Another program on the settings port: the app takes the next one, and the link with the
+    token never points at that program. A second copy of the app finds the first one instead of
+    serving the same port beside it (which Windows allows)."""
+    import socket
+
+    from stashdisplay.web import server
+
+    other = socket.socket()
+    other.bind(("127.0.0.1", 0))
+    other.listen(5)
+    held = other.getsockname()[1]
+    app.store.settings["web"]["port"] = held
+    assert server.listening(held) and not server.running_copy(held, timeout=0.3)
+    web_server = server.start(app)
+    try:
+        used = app.store.settings["web"]["port"]
+        assert web_server is not None and held < used < held + server.PORT_TRIES
+        assert server.url(app).startswith(f"http://127.0.0.1:{used}/")  # where the token goes
+        assert server.running_copy(used)
+
+        second = App(Store.load(app.store.path), AssetCache(root=tmp_path / "cache", offline=True),
+                     MediaStore(tmp_path / "media"))
+        second.store.settings["web"]["port"] = held
+        assert server.start(second) is None  # nothing started beside the first copy
+        assert second.store.settings["web"]["port"] == used  # and its page is the one to open
+    finally:
+        web_server.close()
+        other.close()

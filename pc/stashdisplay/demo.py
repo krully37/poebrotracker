@@ -176,6 +176,8 @@ def run(offline: bool = False, simulator: bool = False) -> int:
         app.simulator = (SimScreen((pair := LoopbackPair()).screen), pair)
         SimRunner(app.simulator[0]).start()
         try:
+            if server.listening(app.store.settings["web"]["port"]):
+                raise OSError("in use")  # a failed bind does not tell on Windows (server.listening)
             server.serve_in_background(app)
         except OSError:
             print("The settings port is busy: quit the Stash Display app first.")

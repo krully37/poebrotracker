@@ -12,6 +12,7 @@ import hmac
 import io
 import logging
 import random
+import socket
 import threading
 import time
 from pathlib import Path
@@ -417,10 +418,64 @@ def url(app: App) -> str:
     return f"http://127.0.0.1:{app.store.settings['web']['port']}/?token={app.store.token}"
 
 
+PORT_TRIES = 10  # ports tried, from the one in the settings, when another program holds it
+LOCKED_MARK = "<title>Stash Display</title>"  # in static/locked.html, what "/" answers without the token
+
+
+def listening(port: int, timeout: float = 0.5) -> bool:
+    """Whether something already answers on this port of this PC. Asked before binding: on
+    Windows a second server can bind a port that another one is serving (seen 2026-11-13 with
+    two Waitress servers), so the bind failing is not a test of that."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def running_copy(port: int, timeout: float = 2.0) -> bool:
+    """Whether what answers on this port is this app's settings page: asked for "/" without the
+    token, it answers its "locked" page. Nothing secret is sent to find out."""
+    import requests
+
+    http = requests.Session()
+    http.trust_env = False  # never through a proxy: this is 127.0.0.1
+    try:
+        r = http.get(f"http://127.0.0.1:{port}/", timeout=timeout, allow_redirects=False)
+    except requests.RequestException:
+        return False
+    return r.status_code == 200 and LOCKED_MARK in r.text
+
+
+def start(app: App):
+    """Start the settings page, on the port in the settings or, when another program holds it, on
+    one of the next ones. Returns the server, or None when a copy of this app is already running
+    (the settings then point at its port, so its page can be opened).
+
+    The port used is kept in the settings in memory, so the tray's link and the Host checks
+    follow it. The token is only ever sent to a port this app serves: opening the link on a port
+    held by another program would hand it the token.
+    """
+    first = app.store.settings["web"]["port"]
+    for port in range(first, min(first + PORT_TRIES, 65536)):
+        if listening(port):
+            if running_copy(port):
+                app.store.settings["web"]["port"] = port
+                return None
+            log.warning("port %s is held by another program, trying the next one", port)
+            continue
+        app.store.settings["web"]["port"] = port
+        try:
+            return serve_in_background(app)
+        except OSError:
+            log.warning("port %s cannot be used, trying the next one", port)
+    app.store.settings["web"]["port"] = first
+    raise OSError(f"no free port between {first} and {first + PORT_TRIES - 1} for the settings page")
+
+
 def serve_in_background(app: App):
     """Start the settings page on a background thread and return the server (close() stops it).
 
-    Binding happens here, so a port already in use (another copy running) raises OSError now.
+    Binding happens here, so a port that cannot be bound raises OSError now. Whether the port is
+    already served is not checked here (see `listening`): `start` does.
     """
     from waitress import create_server
 
