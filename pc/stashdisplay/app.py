@@ -169,6 +169,7 @@ class App:
                 waited = SYNC_WAIT
         fetched = not self._cookie_expired() and self.fetch(now + waited)
         if s["poeninja"]["enabled"] and self.live:
+            self.prices.interval = s["poeninja"]["interval"]  # as set now, not as it was at start
             self.prices.refresh(self._priced_items(), self._league())  # only when 30 min old
         if fetched or self.status["error"] != error:
             self._screen_sync()  # new values, or the top bar's error appears or changes

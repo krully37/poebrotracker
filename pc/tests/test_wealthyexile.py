@@ -367,3 +367,23 @@ def test_a_surprise_in_a_fetch_turn_is_logged_without_its_text_and_polling_goes_
     assert "RuntimeError" in caplog.text and "secret-from-the-page" not in caplog.text
     app._guarded_turn(False, 10_000.0 + app.store.settings["interval"])
     assert len(calls) == 2  # tried again at the next turn
+
+
+def test_a_new_poe_ninja_interval_applies_without_a_restart(tmp_path, monkeypatch):
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.settings import Store
+    from stashdisplay.sources import poepricer
+    from stashdisplay.sources.base import Snapshot
+
+    monkeypatch.setattr(we, "fetch", lambda cookie, now: Snapshot(total=40.0, time=now, league="L", div_price=300.0))
+    monkeypatch.setattr(poepricer, "running", lambda url: False)
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    used = []
+    monkeypatch.setattr(app.prices, "refresh", lambda names, league: used.append(app.prices.interval))
+    app.store.cookie = "a=b"
+    app._fetch_turn(False, 10_000.0)
+    app.save({**app.store.settings, "poeninja": {"enabled": True, "interval": 900}}, None)
+    app._fetch_turn(False, 10_000.0 + app.store.settings["interval"])
+    assert used == [1800, 900]
