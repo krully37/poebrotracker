@@ -79,6 +79,7 @@ class ScreenLink:
         self.last_sent = 0.0
         self.last_sync = 0.0
         self.seen_events: list[int] = []
+        self._last_crash: str | None = None  # the last unexpected error, to log its traceback once
         self.current_page: str | None = None
         self.idle_sprite: str | None = None  # the PC is idle: the screen bounces this file
 
@@ -132,6 +133,15 @@ class ScreenLink:
             except (OSError, LinkError) as e:
                 log.info("screen link lost: %s", e)
                 self.info["error"] = str(e)
+            except Exception as e:
+                # A bug in what is sent (a page that cannot be drawn) or an answer that cannot be
+                # read: start over like after a lost link, so one bad sync never ends the thread.
+                if repr(e) == self._last_crash:
+                    log.warning("screen link failed again: %r", e)  # every 2 s until it is fixed
+                else:
+                    log.exception("screen link failed")
+                self._last_crash = repr(e)
+                self.info["error"] = type(e).__name__
             finally:
                 port.close()
                 self.port = None
@@ -148,9 +158,12 @@ class ScreenLink:
             self.port, self.reader = port, p.FrameReader()
             try:
                 self.inventory = self._request(p.HELLO, {"version": p.VERSION, "time": int(time.time())}, retries=1)
-            except (OSError, LinkError):
+            except (OSError, LinkError, p.ProtocolError):  # not there, or not the screen
                 port.close()
                 continue
+            # The screen counts its events from 1 again at power-on: what was seen before this
+            # HELLO says nothing about the events to come (docs/PROTOCOL.md, "Events").
+            self.seen_events = []
             if self.inventory.get("version") != p.VERSION:
                 log.warning("screen speaks protocol %s, we speak %s", self.inventory.get("version"), p.VERSION)
             self.state = "connected"

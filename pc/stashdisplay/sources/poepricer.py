@@ -34,17 +34,17 @@ def _get(base: str, path: str, params: dict | None = None, session=None, timeout
 def running(base: str = DEFAULT_URL, session=None) -> bool:
     try:
         return _get(base, "/api/ping", session=session, timeout=1.5).get("app") == "poe-pricer"
-    except SourceError:
+    except (SourceError, AttributeError):  # not there, or something else answering on that port
         return False
 
 
 def divine_price(league: str, base: str = DEFAULT_URL, session=None) -> float | None:
     """Chaos per divine, or None when PoE Pricer is not there or does not know."""
     try:
-        rate = _get(base, "/api/rates", {"league": league}, session).get("divineToChaos")
-    except SourceError:
+        rate = float(_get(base, "/api/rates", {"league": league}, session).get("divineToChaos") or 0)
+    except (SourceError, AttributeError, TypeError, ValueError):
         return None
-    return float(rate) if rate and rate > 0 else None
+    return rate if rate > 0 else None
 
 
 def is_unique_tab(name: str, words: str) -> bool:
@@ -69,7 +69,14 @@ def fetch(league: str, base: str = DEFAULT_URL, session=None, now: float | None 
     """The stash as PoE Pricer last read it, in divines: one entry per bulk family, plus each tab
     of uniques. PoE Pricer gives no tab types, so unique tabs are found by name. The items (for the
     most valuable ones) follow the same rule, one request per tab: it is a local app, and these
-    reads cost it no GGG quota."""
+    reads cost it no GGG quota. An answer shaped another way than expected reads as unavailable."""
+    try:
+        return _fetch(league, base, session, now, unique_tabs)
+    except (AttributeError, KeyError, TypeError, ValueError) as e:
+        raise SourceError(UNAVAILABLE, f"unexpected {type(e).__name__}") from e
+
+
+def _fetch(league: str, base: str, session, now: float | None, unique_tabs: str) -> Snapshot:
     now = time.time() if now is None else now
     rate = divine_price(league, base, session)
     if not rate:

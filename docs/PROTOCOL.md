@@ -24,7 +24,7 @@ COBS( type:u8 | seq:u16 LE | payload | crc32:u32 LE ) 0x00
 
 - **Requests and ACKs:** every PC → screen frame is a request, and the screen answers each one with `ACK`, carrying the same seq. The PC sends one request at a time. It waits up to **1 s** for the ACK, resends the identical frame up to **4** times, then drops the connection and starts looking for the screen again.
 - **Duplicates:** if the screen receives the same type and seq as the request it just answered, it re-sends its previous ACK without applying the request again (its first ACK was lost).
-- **Events:** the screen sends `EVENT` frames with its own seq counter. The PC answers each with `EVENT_ACK` (same seq, empty payload). The screen resends an unanswered event after 1 s, up to 4 times. The PC ignores events whose seq it has seen recently. Events are dropped while the PC is away.
+- **Events:** the screen sends `EVENT` frames with its own seq counter. The PC answers each with `EVENT_ACK` (same seq, empty payload). The screen resends an unanswered event after 1 s, up to 4 times. The PC ignores events whose seq it has seen recently, and forgets those at each `HELLO`: the screen's counter starts at 1 again at power-on, so the seqs seen before would hide its first touches (fixed 2026-11-13). Events are dropped while the PC is away.
 
 ## Messages
 

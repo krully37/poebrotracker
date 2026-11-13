@@ -237,3 +237,38 @@ def test_other_read_failures_show_on_the_screen_but_polling_goes_on(tmp_path, mo
     assert app.render_data()[0].error == we.UNAVAILABLE
     app._fetch_turn(False, 10_000.0 + app.store.settings["interval"])
     assert len(calls) == 2  # tried again at the next turn
+
+
+def test_a_surprise_in_the_page_reads_as_changed_without_quoting_it(monkeypatch):
+    d = data()
+    d["user"]["tabs"][0]["items"][0]["quantity"] = "secret-from-the-page"  # a text where a number was
+    monkeypatch.setattr(we, "fetch_page", lambda cookie: page(d))
+    with pytest.raises(SourceError) as e:
+        we.fetch("a=b")
+    assert e.value.short == we.CHANGED
+    assert "secret-from-the-page" not in str(e.value) and e.value.__cause__ is None
+
+
+def test_a_surprise_in_a_fetch_turn_is_logged_without_its_text_and_polling_goes_on(tmp_path, monkeypatch, caplog):
+    """The fetcher's thread must outlive anything: a dead one only shows as "stale" for ever."""
+    from stashdisplay.app import App
+    from stashdisplay.assets import AssetCache
+    from stashdisplay.media import MediaStore
+    from stashdisplay.settings import Store
+    from stashdisplay.sources import poepricer
+
+    calls = []
+
+    def fetch(cookie, now):
+        calls.append(now)
+        raise RuntimeError("secret-from-the-page")
+
+    monkeypatch.setattr(we, "fetch", fetch)
+    monkeypatch.setattr(poepricer, "running", lambda url: False)
+    app = App(Store.load(tmp_path / "s.json"), AssetCache(root=tmp_path / "c", offline=True), MediaStore(tmp_path / "m"))
+    app.store.settings["poeninja"]["enabled"] = False
+    app.store.cookie = "a=b"
+    app._guarded_turn(False, 10_000.0)  # does not raise
+    assert "RuntimeError" in caplog.text and "secret-from-the-page" not in caplog.text
+    app._guarded_turn(False, 10_000.0 + app.store.settings["interval"])
+    assert len(calls) == 2  # tried again at the next turn

@@ -62,3 +62,12 @@ def test_fetches_only_the_lists_needed_at_most_every_interval_with_etags(tmp_pat
     # Kept on disk: a restart knows the price without fetching.
     again = ninja.Prices(assets(tmp_path), interval=1800)
     assert again.get(["Mageblood"], "Allflame", div_price=200)["Mageblood"].chaos == 40000.0
+
+
+def test_an_unreadable_answer_is_skipped_and_asked_again_later(tmp_path):
+    a = assets(tmp_path)
+    a.http.get = lambda url, params=None, headers=None, timeout=None: Reply(200, ["not", "the", "shape"])
+    prices = ninja.Prices(a, interval=1800)
+    prices.refresh(["Mageblood"], "Allflame", now=T)  # does not raise
+    assert prices.get(["Mageblood"], "Allflame", div_price=200) == {}
+    assert prices.lists == {}  # nothing kept: the next turn asks again

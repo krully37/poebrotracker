@@ -12,6 +12,7 @@ import io
 import logging
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 
@@ -133,11 +134,21 @@ class App:
                 self._fetch_now.wait(5)
                 asked = self._fetch_now.is_set()
                 self._fetch_now.clear()
-                self._fetch_turn(asked, time.time())
+                self._guarded_turn(asked, time.time())
 
         self._fetcher = threading.Thread(target=run, daemon=True, name="wealthyexile")
         self._fetcher.start()
         return self._fetcher
+
+    def _guarded_turn(self, asked: bool, now: float) -> None:
+        """One turn that cannot end the fetcher: whatever goes wrong, the next turn still comes.
+        Only the error's type and place are logged, never its text: it can quote what WealthyExile
+        sent (docs/SCOPE.md §6)."""
+        try:
+            self._fetch_turn(asked, now)
+        except Exception as e:
+            frame = traceback.extract_tb(e.__traceback__)[-1]
+            log.error("stash fetch turn failed: %s at %s:%s", type(e).__name__, Path(frame.filename).name, frame.lineno)
 
     def _fetch_turn(self, asked: bool, now: float) -> None:
         """One turn of the fetcher (every 5 s): sync WealthyExile first when a tap asked for it or
@@ -240,7 +251,10 @@ class App:
             return False
         with self._data_lock:
             self.history.add(snap.time, snap.total, snap.league)  # one point per WealthyExile sync
-            self.history.save()
+            try:
+                self.history.save()
+            except OSError as e:  # the file is held by something else: the next read saves it
+                log.warning("history not saved: %s", type(e).__name__)
             self.last_snapshot = snap
             self.live = True
         self.status["error"] = None

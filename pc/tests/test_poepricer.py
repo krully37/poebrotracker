@@ -95,3 +95,14 @@ def test_not_running_or_not_poe_pricer():
     with pytest.raises(SourceError) as e:
         pp.fetch("Allflame", session=Fake({"/api/ping": ROUTES["/api/ping"]}))
     assert e.value.short == pp.UNAVAILABLE
+
+
+def test_an_answer_shaped_another_way_reads_as_unavailable():
+    assert pp.divine_price("Allflame", session=Fake(ROUTES | {"/api/rates": {"divineToChaos": "soon"}})) is None
+    assert pp.divine_price("Allflame", session=Fake(ROUTES | {"/api/rates": ["not", "an", "object"]})) is None
+    assert not pp.running(session=Fake({"/api/ping": ["something", "else"]}))
+    odd = ROUTES | {"/api/items": {"items": [{"tabId": "a1", "name": "Divine Orb", "rarity": "Currency",
+                                              "stackSize": "ten", "chaos": 2000, "status": "priced"}]}}
+    with pytest.raises(SourceError) as e:
+        pp.fetch("Allflame", session=Fake(odd), now=1000.0)
+    assert e.value.short == pp.UNAVAILABLE

@@ -223,6 +223,49 @@ def test_power_cycle_loses_overlays_keeps_files(rig):
     assert r.sim.frame()  # offline screen until the PC says hello again
 
 
+def test_touches_still_arrive_after_the_screen_restarts(rig):
+    """The screen counts its events from 1 again at power-on: the PC must not take them for
+    resends of the ones it saw before (docs/PROTOCOL.md, "Events")."""
+    r = rig(Content([page("a")], {}))
+    wait_for(lambda: r.sim.pages and r.link.state == "connected")
+
+    def tap():
+        seen = len(r.events)
+        r.sim.touch_down(240, 160)
+        r.sim.touch_up(240, 160)
+        wait_for(lambda: len(r.events) == seen + 1)
+
+    for _ in range(3):
+        tap()
+    r.pair.unplug()
+    wait_for(lambda: r.link.state == "searching")
+    r.sim.power_cycle()
+    r.pair.plug()
+    wait_for(lambda: r.sim.pages and r.link.state == "connected", timeout=10)
+    for _ in range(3):
+        tap()
+    assert [e["type"] for e in r.events] == ["tap"] * 6
+
+
+def test_a_crash_while_syncing_does_not_end_the_link(rig):
+    content = Content([page("a")], {})
+    r = rig(content)
+    wait_for(lambda: r.sim.pages and r.link.state == "connected")
+    good, crashes = r.link.content, []
+
+    def broken():
+        if not crashes:
+            crashes.append(1)
+            raise KeyError("a page that cannot be drawn")
+        return good()
+
+    r.link.content = broken
+    content.pages = [page("a"), page("b")]
+    r.link.request_sync()
+    wait_for(lambda: len(r.sim.pages) == 2, timeout=10)  # it started over and synced
+    assert crashes and r.link.thread.is_alive()
+
+
 def test_full_flash_skips_the_background(rig):
     big = FileContent(jpeg("green") + bytes(200_000), "jpeg")
     content = Content([page("a")], {"bg-big": big})

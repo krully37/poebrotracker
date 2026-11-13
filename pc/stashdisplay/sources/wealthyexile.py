@@ -113,8 +113,21 @@ def parse(text: str, now: float | None = None) -> Snapshot:
                     items=items, div_price=float(div_price), league=league)
 
 
+def _as_expected(read):
+    """Runs `read`, a step that reads the page's payload. Anything in it that is not as expected
+    (a text where a number was, a list where an object was) means the site changed. The error's
+    own text is dropped: it can quote the page."""
+    try:
+        return read()
+    except SourceError:
+        raise
+    except Exception as e:
+        raise SourceError(CHANGED, f"unexpected {type(e).__name__}") from None
+
+
 def fetch(cookie: str, now: float | None = None) -> Snapshot:
-    return parse(payload(fetch_page(cookie)), now)
+    html = fetch_page(cookie)
+    return _as_expected(lambda: parse(payload(html), now))
 
 
 # --- Sync: what the site's "Sync stash" button does -------------------------------------------
@@ -159,7 +172,7 @@ def sync(cookie: str, session=None) -> None:
     """Sync the stash on WealthyExile, as its button does. Its reply is dropped unread: it can carry
     the session itself."""
     html = fetch_page(cookie, session)
-    args = sync_args(payload(html))
+    args = _as_expected(lambda: sync_args(payload(html)))
     action = sync_action(html, session)
     headers = {"Cookie": cookie, "User-Agent": USER_AGENT, "Accept": "text/x-component",
                "Next-Action": action, "Content-Type": "text/plain;charset=UTF-8"}

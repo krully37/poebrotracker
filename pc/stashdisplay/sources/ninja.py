@@ -68,7 +68,12 @@ class Prices:
             if r.status_code == 304:
                 entry["fetched"] = now
             elif r.ok:
-                entry = {"fetched": now, "etag": r.headers.get("etag"), "prices": parse(r.json())}
+                try:
+                    found = parse(r.json())
+                except (AttributeError, TypeError, ValueError) as e:  # not the JSON expected
+                    log.info("poe.ninja %s: unreadable answer (%s)", kind, type(e).__name__)
+                    continue
+                entry = {"fetched": now, "etag": r.headers.get("etag"), "prices": found}
             else:
                 log.info("poe.ninja %s: HTTP %s", kind, r.status_code)
                 continue
