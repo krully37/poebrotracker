@@ -24,8 +24,34 @@ TIMEOUT = 20
 _PUSH = re.compile(r'self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)')
 _DECODER = json.JSONDecoder()
 
+STASH_URL = URL + "stash"  # the stash page's own address: logged out, it redirects to the login page
+
 CHANGED = "WealthyExile changed"
 UNAVAILABLE = "WealthyExile unavailable"
+
+
+class NoUser(SourceError):
+    """The page holds no user: the site changed, or it served its landing page to a cookie it no
+    longer knows (`_with_user` finds out which)."""
+
+_REDIRECTS = (301, 302, 303, 307, 308)
+# Where the site sends a visitor who is not logged in: /stash answers 307 to /login (seen
+# 2026-11-13, without a cookie). The other names are what such pages are usually called.
+_LOGIN = re.compile(r"/(log-?in|sign-?in|auth)\b", re.IGNORECASE)
+
+
+def _turned_away(r) -> SourceError | None:
+    """Why a reply is not the page asked for, or None when it may be. Only a redirect to the login
+    page (or a 401) means the cookie expired, which stops every request until a new one is pasted
+    (docs/SCOPE.md §6). Any other redirect (maintenance, another address) is tried again at the
+    next turn."""
+    if r.status_code == 401:
+        return AuthError("Cookie expired")
+    if r.status_code in _REDIRECTS:
+        if _LOGIN.search(r.headers.get("Location") or ""):
+            return AuthError("Cookie expired")
+        return SourceError(UNAVAILABLE, f"HTTP {r.status_code} to another page")
+    return None
 
 
 def fetch_page(cookie: str, session: requests.Session | None = None) -> str:
@@ -41,8 +67,8 @@ def fetch_page(cookie: str, session: requests.Session | None = None) -> str:
     if r.headers.get("cf-mitigated") or "<title>Just a moment" in r.text[:2000]:
         # A Cloudflare check: never worked around (CLAUDE.md). The next turn tries again.
         raise SourceError(UNAVAILABLE, "Cloudflare check")
-    if r.status_code in (301, 302, 303, 307, 308, 401):
-        raise AuthError("Cookie expired")
+    if away := _turned_away(r):
+        raise away
     if r.status_code != 200:
         raise SourceError(UNAVAILABLE, f"HTTP {r.status_code}")
     return r.text
@@ -87,7 +113,7 @@ def parse(text: str, now: float | None = None) -> Snapshot:
     if user is None:
         if not text or '"user":null' in text:
             raise AuthError("Cookie expired")
-        raise SourceError(CHANGED, "no user with tabs")
+        raise NoUser(CHANGED, "no user with tabs")
     league = user.get("preferredLeague") or ""
     tabs = [t for t in user.get("tabs") or [] if isinstance(t, dict)]
     prices = _first(text, "priceMap", lambda v: isinstance(v, list)) or []
@@ -125,9 +151,35 @@ def _as_expected(read):
         raise SourceError(CHANGED, f"unexpected {type(e).__name__}") from None
 
 
-def fetch(cookie: str, now: float | None = None) -> Snapshot:
-    html = fetch_page(cookie)
-    return _as_expected(lambda: parse(payload(html), now))
+def _logged_out(cookie: str, session=None) -> bool:
+    """Whether the site takes this cookie for a visitor who is not logged in: it then answers the
+    stash page's own address with the redirect to its login page (seen 2026-11-13). One request,
+    made only when a page came back without the user."""
+    get = (session or requests).get
+    try:
+        r = get(STASH_URL, headers={"Cookie": cookie, "User-Agent": USER_AGENT, "Accept": "text/html"},
+                timeout=TIMEOUT, allow_redirects=False)
+    except requests.RequestException:
+        return False
+    return isinstance(_turned_away(r), AuthError)
+
+
+def _with_user(cookie: str, session, read):
+    """Runs `read` on the payload of a page that should hold the user. Logged out, the site serves
+    its landing page there instead (200, no user at all), which reads like a changed site: the
+    stash page's address tells the two apart, so an expired cookie says "Cookie expired" and
+    stops the requests (docs/SCOPE.md §6 and §9)."""
+    try:
+        return _as_expected(read)
+    except NoUser:
+        if _logged_out(cookie, session):
+            raise AuthError("Cookie expired") from None
+        raise
+
+
+def fetch(cookie: str, now: float | None = None, session=None) -> Snapshot:
+    html = fetch_page(cookie, session)
+    return _with_user(cookie, session, lambda: parse(payload(html), now))
 
 
 # --- Sync: what the site's "Sync stash" button does -------------------------------------------
@@ -139,7 +191,7 @@ def fetch(cookie: str, now: float | None = None) -> Snapshot:
 # to 11 changed the first value). The action's id changes with each deployment of the site, so it
 # is read from the site's scripts.
 
-SYNC_URL = "https://wealthyexile.com/stash"
+SYNC_URL = STASH_URL
 # Every script the page names, in its tags or in its payload: the action sits in one loaded later.
 _SCRIPT = re.compile(r'(static/chunks/[\w./()\[\]~%@-]+?\.js)')
 _DEPLOYMENT = re.compile(r'/_next/static/[^"]+?\?dpl=([\w-]+)')
@@ -150,7 +202,7 @@ def sync_args(text: str) -> list:
     """The button's arguments, from the page's payload."""
     user = _first(text, "user", lambda v: isinstance(v, dict) and "tabs" in v)
     if user is None:
-        raise SourceError(CHANGED, "no user to sync")
+        raise NoUser(CHANGED, "no user to sync")
     snapshots = [s.get("createdAt") for s in user.get("snapshots") or [] if isinstance(s, dict) and s.get("createdAt")]
     return [user.get("priceThresholdPerStack"), max(snapshots) if snapshots else None, user.get("lastHourlySync")]
 
@@ -186,7 +238,7 @@ def sync(cookie: str, session=None) -> None:
     the session itself."""
     global _action
     html = fetch_page(cookie, session)
-    args = _as_expected(lambda: sync_args(payload(html)))
+    args = _with_user(cookie, session, lambda: sync_args(payload(html)))
     version = _site_version(html)
     if _action is None or _action[0] != version:
         _action = (version, sync_action(html, session))
@@ -202,8 +254,8 @@ def sync(cookie: str, session=None) -> None:
                  headers=headers)
     except requests.RequestException as e:
         raise SourceError(UNAVAILABLE, type(e).__name__) from e
-    if r.status_code in (301, 302, 303, 307, 308, 401):
-        raise AuthError("Cookie expired")
+    if away := _turned_away(r):
+        raise away
     if r.status_code != 200:
         _action = None  # in case the id was the trouble: the next sync reads it again
         raise SourceError(UNAVAILABLE, f"sync: HTTP {r.status_code}")

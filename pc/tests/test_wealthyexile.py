@@ -94,8 +94,17 @@ def test_fetch_sends_the_cookie_and_spots_logouts_and_cloudflare():
     s = Session(Reply(text="<html>ok</html>"))
     assert we.fetch_page("a=b", s) == "<html>ok</html>"
     assert s.sent["Cookie"] == "a=b" and "stashdisplay" in s.sent["User-Agent"]
-    with pytest.raises(AuthError):
-        we.fetch_page("a=b", Session(Reply(status=307)))
+    # Logged out, the site answers 307 to /login (seen 2026-11-13): only that, or a 401, is an expired cookie.
+    for logged_out in (Reply(status=307, headers={"Location": "/login"}), Reply(status=401),
+                       Reply(status=302, headers={"Location": "https://wealthyexile.com/api/auth/signin?x=1"})):
+        with pytest.raises(AuthError):
+            we.fetch_page("a=b", Session(logged_out))
+    # Any other redirect (maintenance, another address) is tried again later, with the same cookie.
+    for elsewhere in (Reply(status=307, headers={"Location": "/maintenance"}), Reply(status=308),
+                      Reply(status=301, headers={"Location": "https://www.wealthyexile.com/"})):
+        with pytest.raises(SourceError) as e:
+            we.fetch_page("a=b", Session(elsewhere))
+        assert e.value.short == we.UNAVAILABLE and not isinstance(e.value, AuthError)
     with pytest.raises(AuthError):
         we.fetch_page("", Session(Reply()))
     with pytest.raises(SourceError) as e:
@@ -160,6 +169,46 @@ def test_sync_sends_what_the_sites_button_sends():
     assert json.loads(body) == [10, "$D2026-10-29T20:08:00.000Z", "$D2025-01-01T21:20:33.000Z"]
     with pytest.raises(SourceError):
         we.sync_action("<html></html>", site)
+
+
+class LandingPage:
+    """The site as a visitor without the user sees it: "/" answers 200 with a page that holds no
+    user at all; the stash page's own address answers as `stash` says."""
+
+    def __init__(self, stash):
+        self.stash, self.asked, self.posted = stash, [], 0
+
+    def get(self, url, headers=None, **_):
+        self.asked.append(url)
+        return self.stash if url == we.STASH_URL else Reply(text=page({"plans": ["free", "premium"]}))
+
+    def post(self, *a, **_):
+        self.posted += 1
+        return Reply()
+
+
+def test_a_page_without_the_user_is_an_expired_cookie_when_the_stash_page_sends_to_the_login():
+    """Logged out, "/" is the landing page (seen 2026-11-13): one more request tells an expired
+    cookie, which stops every request, from a site that changed, which is tried again."""
+    logged_out = LandingPage(Reply(status=307, headers={"Location": "/login"}))
+    with pytest.raises(AuthError):
+        we.fetch("a=b", session=logged_out)
+    assert logged_out.asked == [we.URL, we.STASH_URL]  # the page, then the one check
+    with pytest.raises(AuthError):
+        we.sync("a=b", logged_out)
+    assert logged_out.posted == 0  # nothing is synced with a cookie the site no longer knows
+
+    for stash in (Reply(text="<html>the stash, shaped another way</html>"), Reply(status=503),
+                  Reply(status=307, headers={"Location": "/maintenance"})):
+        changed = LandingPage(stash)
+        with pytest.raises(SourceError) as e:
+            we.fetch("a=b", session=changed)
+        assert e.value.short == we.CHANGED and not isinstance(e.value, AuthError)
+
+    # A page that reads well asks nothing more.
+    fine = LandingPage(Reply(status=307, headers={"Location": "/login"}))
+    fine.get = lambda url, headers=None, **_: fine.asked.append(url) or Reply(text=page(data()))
+    assert we.fetch("a=b", session=fine).league == "Allflame" and fine.asked == [we.URL]
 
 
 def test_sync_reads_the_sites_scripts_once_per_deployment():
@@ -288,7 +337,7 @@ def test_other_read_failures_show_on_the_screen_but_polling_goes_on(tmp_path, mo
 def test_a_surprise_in_the_page_reads_as_changed_without_quoting_it(monkeypatch):
     d = data()
     d["user"]["tabs"][0]["items"][0]["quantity"] = "secret-from-the-page"  # a text where a number was
-    monkeypatch.setattr(we, "fetch_page", lambda cookie: page(d))
+    monkeypatch.setattr(we, "fetch_page", lambda cookie, session=None: page(d))
     with pytest.raises(SourceError) as e:
         we.fetch("a=b")
     assert e.value.short == we.CHANGED
