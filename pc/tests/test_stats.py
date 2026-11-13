@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import pytest
@@ -80,3 +81,31 @@ def test_an_unreadable_history_starts_again_and_keeps_the_file(tmp_path):
     h.add(1000.0, 5.0, "Allflame")
     h.save()
     assert History.load(path).points == [(1000.0, 5.0)]
+
+
+def test_another_league_starts_the_history_again(tmp_path):
+    """A new league's stash starts near zero: it must not read as a loss of the old league's value."""
+    path = tmp_path / "history.json"
+    h = History.load(path)
+    for i in range(6):
+        h.add(1000.0 + 300 * i, 400.0 + i, "Old League")
+    h.start_session(1000.0)
+    h.add(900.0, 2.0, "New League")  # even when its last sync is older than the old league's
+    assert h.points == [(900.0, 2.0)] and h.session_start == h.rate_start == 900.0
+    h.add(1200.0, 3.5, "New League")
+    assert stats.gain_since(h.points, h.session_start) == pytest.approx(1.5)
+    assert stats.gain_since(h.points, 0.0) == pytest.approx(1.5)  # "today" too: nothing of the old league is left
+    assert h.league_starts == {"Old League": (1000.0, 400.0), "New League": (900.0, 2.0)}
+    h.add(1500.0, 4.0)  # a source that names no league changes nothing
+    assert len(h.points) == 3
+    h.save()
+    assert History.load(path).league == "New League"
+
+    # A file from before the league was kept: the league first seen last is the current one.
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["league"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    old = History.load(path)
+    assert old.league == "New League"
+    old.add(1800.0, 4.5, "New League")
+    assert len(old.points) == 4  # the same league: nothing starts again

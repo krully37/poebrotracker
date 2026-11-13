@@ -21,6 +21,7 @@ class History:
     rate_start: float = 0.0  # div/h only counts points after this (long press on the screen resets it)
     # First point seen in each league: {league: (time, total)}
     league_starts: dict[str, tuple[float, float]] = field(default_factory=dict)
+    league: str = ""  # the league of the points kept
 
     @classmethod
     def load(cls, path: Path | None) -> "History":
@@ -28,12 +29,15 @@ class History:
             return cls(path=path)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            league_starts = {k: (float(t), float(v)) for k, (t, v) in data.get("league_starts", {}).items()}
             return cls(
                 path=path,
                 points=[(float(t), float(v)) for t, v in data.get("points", [])],
                 session_start=float(data.get("session_start", 0)),
                 rate_start=float(data.get("rate_start", 0)),
-                league_starts={k: (float(t), float(v)) for k, (t, v) in data.get("league_starts", {}).items()},
+                league_starts=league_starts,
+                # A file from before this was kept: the league seen last is the one first seen last.
+                league=str(data.get("league") or (list(league_starts)[-1] if league_starts else "")),
             )
         except (OSError, ValueError, TypeError, AttributeError) as e:
             # Like maps.json and characters.json: the app starts again without it, and keeps the file.
@@ -50,6 +54,7 @@ class History:
             "session_start": self.session_start,
             "rate_start": self.rate_start,
             "league_starts": self.league_starts,
+            "league": self.league,
         }
         # Write then rename, so a crash or power cut never leaves a half-written file.
         tmp = self.path.with_suffix(".tmp")
@@ -57,6 +62,14 @@ class History:
         os.replace(tmp, self.path)
 
     def add(self, time: float, total: float, league: str = "") -> None:
+        if league and self.league and league != self.league:
+            # Another league is another stash: its value does not carry on from the old one's (a
+            # new league starts near zero, which showed as a huge loss today and this session).
+            # The points start again, and so do the session and div/h.
+            self.points = []
+            self.session_start = self.rate_start = time
+        if league:
+            self.league = league
         if self.points and time <= self.points[-1][0]:
             return  # out of order or duplicate
         self.points.append((time, total))
