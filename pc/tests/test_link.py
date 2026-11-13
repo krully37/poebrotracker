@@ -415,3 +415,26 @@ def test_only_the_screens_own_usb_id_is_opened_when_looking_for_it(monkeypatch):
     ])
     assert candidate_ports() == ["COM5"]
     assert candidate_ports("COM3") == ["COM3"]  # a port set in the settings is used as it is
+
+
+def test_the_offline_screen_goes_dark_after_ten_minutes_and_a_touch_lights_it_again():
+    """A PC that is off can keep its USB ports powered: the screen must not stay lit all night."""
+    now = [1000.0]
+    sim = SimScreen(None, clock=lambda: now[0])
+    assert sim.frame().getbbox()  # "Waiting for the PC", dimmed
+    now[0] += p.DARK_AFTER - 1
+    assert sim.frame().getbbox()
+    now[0] += 1
+    assert sim.frame().getbbox() is None  # all black: the backlight is off
+    sim.touch_down(240, 160)
+    sim.touch_up(240, 160)
+    assert sim.frame().getbbox()  # lit again, to say why the screen was dark
+    now[0] += p.DARK_AFTER
+    assert sim.frame().getbbox() is None
+
+    # After the PC went away: 90 s to "PC disconnected", then ten minutes more.
+    sim.last_rx = now[0]
+    now[0] += p.OFFLINE_AFTER + p.DARK_AFTER - 1
+    assert sim.frame().getbbox()
+    now[0] += 1
+    assert sim.frame().getbbox() is None

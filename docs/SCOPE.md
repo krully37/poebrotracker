@@ -53,7 +53,7 @@ The brief's non-negotiable constraints are unchanged. Nothing touches the game, 
   - **The screen animates it**: the PC sends the cut-out cat once (about 13 kB in flash, the `idle` file) and then only says "idle" or "not idle". Turning a 150×130 sprite each frame is a few milliseconds on the ESP32-S3; if the real frame rate says otherwise, the fallback is turned copies pre-rendered by the PC (72 of them, about 1 MB).
   - A touch on the cat shows the pages for 1 minute, then the cat comes back if the PC is still idle. That touch does nothing else (no refresh). Event animations play as usual and the cat comes back after them. PC disconnected wins: offline screen and dimming as always.
   - Built-in only for now: replacing the cat from the settings page can come later.
-- **PC disconnected** after 90 s with no message, and the backlight dims. Full brightness returns on reconnect.
+- **PC disconnected** after 90 s with no message, and the backlight dims. Full brightness returns on reconnect. After 10 minutes on an offline screen ("PC disconnected" or "Waiting for the PC") the backlight goes off (2026-11-13): a PC that is off or asleep can keep its USB ports powered, and the screen stayed lit at 30 % all night. A touch lights the offline screen again for 10 minutes. The idle cat is left as decided: full brightness for as long as the PC is on and idle. A brightness setting is not built.
 - **Stale data** badge (rendered by the PC) if the last successful fetch is over 15 min old.
 - Firmware is flashed by the project owner before handing the screen over. The friend never flashes.
 

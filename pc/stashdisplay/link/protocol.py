@@ -276,6 +276,7 @@ HOLD_FILL = 1.5  # s for its bar to fill; lifting earlier cancels
 # the PC, and fills theme.HOLD_BAR in theme.GOLD from the left as the hold goes on.
 SLIDE_SECONDS = 0.28
 DIM_LEVEL = 0.3  # backlight while the PC is away
+DARK_AFTER = 600  # s of the offline screen before the backlight goes off; a touch lights it again
 EVENT_DIM = 0.4  # brightness of the page under an over-the-page event animation
 FLASH_BYTES = 11 * 1024 * 1024  # file storage on the screen (§5 of the scope)
 # The start animation, played at power-on without the PC: a GIF plays once, looping until

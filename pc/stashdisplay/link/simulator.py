@@ -42,6 +42,8 @@ class SimScreen:
             self.xfers: dict[int, dict] = {}
             self.current = 0
             self.last_rx: float | None = None
+            self.powered_at = self.clock()
+            self.offline_touch = float("-inf")  # the last touch on the offline screen
             self.last_reply: tuple[int, int, bytes] | None = None  # (type, seq, frame) for resends
             self.slide: tuple[int, int, float] | None = None  # (from, to, start)
             self.toast: tuple[str, float] | None = None  # (overlay id, until)
@@ -284,6 +286,12 @@ class SimScreen:
     def online(self, now: float) -> bool:
         return self.last_rx is not None and now - self.last_rx < p.OFFLINE_AFTER
 
+    def _offline_since(self, now: float) -> float:
+        """When the offline screen came up: at power-on, or 90 s after the PC's last frame."""
+        if self.last_rx is None:
+            return self.powered_at
+        return min(now, self.last_rx + p.OFFLINE_AFTER)
+
     def _page_id(self) -> str | None:
         return self.pages[self.current]["id"] if self.pages else None
 
@@ -291,6 +299,8 @@ class SimScreen:
 
     def touch_down(self, x: float, y: float) -> None:
         with self.lock:
+            if not self.online(self.clock()) or not self.pages:
+                self.offline_touch = self.clock()  # lights the offline screen again (DARK_AFTER)
             wake = self.idle is not None and self.anim is None
             zone = None if wake else self._zone_at(x, y)
             self.touch = {"t0": self.clock(), "x0": x, "y0": y, "x": x, "y": y,
@@ -360,6 +370,8 @@ class SimScreen:
                 img = self._with_overlay(img, overlay_id)
                 return img if self.online(now) or file_id == "boot" else _dim(img)
             if not self.online(now) or not self.pages:
+                if now - max(self._offline_since(now), self.offline_touch) >= p.DARK_AFTER:
+                    return Image.new("RGB", (WIDTH, HEIGHT))  # the backlight is off
                 return _dim(offline_screen(self.last_rx is not None))
             if self.idle:
                 return self._idle_frame()

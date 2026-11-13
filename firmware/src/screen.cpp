@@ -32,6 +32,7 @@ using compositor::Sprite;
 
 constexpr uint8_t kFull = 255;
 constexpr uint8_t kDim = 77;  // 30 %, docs/PROTOCOL.md
+constexpr uint32_t kDarkAfterMs = 10 * 60 * 1000;  // offline this long: the backlight goes off
 constexpr int kUnderAnimation = 40;  // % brightness of the page under an over-the-page animation
 constexpr uint32_t kSlideMs = 280;
 constexpr int kMaxDots = 8;
@@ -77,6 +78,9 @@ bool waking = false;  // a finger came down on the idle cat
 
 Mode shown = Mode::None;
 bool dirty = true;
+// The offline screen: when it was last lit (shown, or touched), and whether its light is off.
+uint32_t offlineLitMs = 0;
+bool offlineDark = false;
 
 gestures::Tracker tracker;
 uint32_t lastTouchMs = 0;
@@ -567,8 +571,21 @@ void tick() {
   }
   Mode mode = online && !pages.empty() ? Mode::Page : everHeard ? Mode::Disconnected : Mode::Waiting;
   if (mode != Mode::Page) {
-    tracker = gestures::Tracker();  // a finger on the offline screen does nothing
-    if (mode != shown) showOffline(mode);
+    tracker = gestures::Tracker();  // a finger on the offline screen sends nothing
+    if (mode != shown) {
+      showOffline(mode);
+      offlineLitMs = now;
+      offlineDark = false;
+    } else if (touch::read().down) {
+      // A touch lights the offline screen again: it says why the screen is dark.
+      if (offlineDark) display::backlight(kDim);
+      offlineLitMs = now;
+      offlineDark = false;
+    } else if (!offlineDark && now - offlineLitMs >= kDarkAfterMs) {
+      // The PC is off or asleep but the USB port still has power: no light all night.
+      display::backlight(0);
+      offlineDark = true;
+    }
     shown = mode;
     preloadSoon(now);
     return;
