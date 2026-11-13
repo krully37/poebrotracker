@@ -1009,13 +1009,27 @@ document.addEventListener("alpine:init", () => {
 
     async saveCookie() {
 
-      await api("/api/cookie", { method: "POST", json: { cookie: this.cookieInput } });
+      // The PC app finds the cookie in what was pasted (Copy as cURL, the headers, the Cookie
+
+      // line...), then it is tested at once so the friend sees straight away whether it works.
+
+      const res = await api("/api/cookie", { method: "POST", json: { cookie: this.cookieInput } });
 
       this.cookieInput = "";
 
+      if (!res.ok) {
+
+        this.cookieStatus = { kind: "warn", text: this.t("we.cookie.none") };
+
+        return;
+
+      }
+
       this.hasCookie = true;
 
-      this.cookieStatus = { kind: "ok", text: this.t("we.cookie.stored") };
+      this.cookieStatus = { kind: "", text: this.t("we.cookie.testing") };
+
+      await this.testCookie();
 
     },
 

@@ -31,6 +31,7 @@ from ..render.widgets import FRAMES, WIDGETS
 from ..settings import LANGUAGES
 from ..sources import poepricer, wealthyexile
 from ..sources.base import AuthError, SourceError
+from .cookie_paste import cookie_from_paste
 
 log = logging.getLogger(__name__)
 
@@ -174,8 +175,14 @@ def create_app(app: App) -> Flask:
 
     @web.post("/api/cookie")
     def set_cookie():
+        """Saves the cookie found in what was pasted (cURL, headers, the Cookie line...); an empty
+        paste removes it. A paste with no cookie in it changes nothing."""
         body = request.get_json(force=True) or {}
-        store.cookie = str(body.get("cookie", "")).strip()
+        pasted = str(body.get("cookie", ""))
+        cookie = cookie_from_paste(pasted) if pasted.strip() else ""
+        if cookie is None:
+            return jsonify({"has_cookie": bool(store.cookie), "code": "none"}), 400
+        store.cookie = cookie
         store.save()
         if store.cookie:
             app.refresh(time.time())  # read WealthyExile with it now

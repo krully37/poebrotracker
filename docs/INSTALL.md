@@ -22,9 +22,10 @@ The program reads your stash on WealthyExile, so it needs your WealthyExile logi
 
 1. Log in to wealthyexile.com in your browser.
 2. In the settings page, open the **Settings** tab. Next to **WealthyExile**, hover the **?**: it
-   shows the steps to copy your cookie (F12, Network, reload, copy the Cookie line).
-3. Paste it in the box, click **Save cookie**, then **Test**. It should say how many divines you
-   have.
+   shows the steps: F12, Network, reload, then right-click the first line and pick **Copy** then
+   **Copy as cURL**.
+3. Paste it in the box and click **Save cookie**. It is tested at once and should say how many
+   divines you have.
 
 The cookie works like a password: never send it to anyone, not even to the person who made the
 screen. It is stored encrypted on your PC and only ever goes to WealthyExile. When WealthyExile

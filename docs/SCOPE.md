@@ -137,6 +137,7 @@ Decided 2026-10-27.
 
 **Settings beyond pages**
 - WealthyExile cookie: pasted into a masked field, with a "Test" button. On Windows it is stored encrypted with DPAPI (Windows' per-user encryption), not as plain text. It is not read from the browser automatically (Chrome encrypts its cookies, and that would mean touching the browser's credential store).
+  - **Smart paste (2026-11-13):** finding the Cookie line in the developer tools was the fiddly part, so the box takes anything the tools copy for the page's request, and the PC app finds the cookie in it (`pc/stashdisplay/web/cookie_paste.py`): "Copy as cURL" (bash or cmd, Chrome, Edge, Firefox), "Copy as PowerShell", the request headers copied whole, the Cookie line, or the value alone. The guide now says: right-click the first line of the Network tab, Copy, Copy as cURL. A paste with no cookie in it is turned down and the saved cookie is kept. Save tests the cookie at once (no separate Test click). Still pasted by hand: nothing reads the browser's cookies. Considered and set aside: GGG's official OAuth (no cookie at all, but GGG must approve the app and the stash would be priced by us), and a browser extension (it would read the browser's cookies, against the brief).
 - Intervals, poe.ninja items, and Start with Windows.
 
 **Backgrounds in this step**

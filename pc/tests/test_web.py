@@ -132,6 +132,26 @@ def test_state_never_contains_the_cookie(client, app):
     assert json.loads(body)["has_cookie"] is True
 
 
+def test_a_pasted_curl_command_saves_only_its_cookie(client, app):
+    paste = "curl 'https://wealthyexile.com/stash' \\\n  -H 'accept: text/html' \\\n  -b 'session=abc; cf=1'"
+    r = client.post("/api/cookie", json={"cookie": paste}, headers=WRITE)
+    assert r.status_code == 200 and r.get_json() == {"has_cookie": True}
+    assert app.store.cookie == "session=abc; cf=1"
+
+
+def test_a_paste_without_a_cookie_changes_nothing(client, app):
+    app.store.cookie = "session=abc"
+    r = client.post("/api/cookie", json={"cookie": "https://wealthyexile.com/stash"}, headers=WRITE)
+    assert r.status_code == 400 and r.get_json() == {"has_cookie": True, "code": "none"}
+    assert app.store.cookie == "session=abc"
+
+
+def test_an_empty_paste_removes_the_cookie(client, app):
+    app.store.cookie = "session=abc"
+    r = client.post("/api/cookie", json={"cookie": ""}, headers=WRITE)
+    assert r.get_json() == {"has_cookie": False} and app.store.cookie == ""
+
+
 # --- API -------------------------------------------------------------------------------
 
 def test_preview_returns_a_screen_sized_png(client):

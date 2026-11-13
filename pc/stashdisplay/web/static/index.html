@@ -265,7 +265,7 @@
           <span class="help-box" role="tooltip">
             <strong x-text="t('we.howto.title')"></strong>
             <ol>
-              <template x-for="n in [1, 2, 3, 4, 5, 6]" :key="n"><li x-text="t('we.howto.' + n)"></li></template>
+              <template x-for="n in [1, 2, 3, 4, 5]" :key="n"><li x-text="t('we.howto.' + n)"></li></template>
             </ol>
             <span x-text="t('we.howto.warning')"></span>
           </span>
@@ -273,7 +273,8 @@
       </h2>
       <p class="hint" x-text="t('we.hint')"></p>
       <div class="cookie-row">
-        <input type="password" x-model="cookieInput" :placeholder="hasCookie ? t('we.cookie.saved') : t('we.cookie.paste')" autocomplete="off">
+        <!-- A password box drops line breaks, which a pasted header block needs: keep the paste as it was. -->
+        <input type="password" x-model="cookieInput" @paste.prevent="cookieInput = $event.clipboardData.getData('text')" :placeholder="hasCookie ? t('we.cookie.saved') : t('we.cookie.paste')" autocomplete="off">
         <button class="btn" @click="saveCookie()" :disabled="!cookieInput" x-text="t('we.cookie.save')"></button>
         <button class="btn" @click="testCookie()" :disabled="!hasCookie" x-text="t('we.cookie.test')"></button>
         <button class="btn danger" @click="clearCookie()" x-show="hasCookie" x-text="t('we.cookie.clear')"></button>

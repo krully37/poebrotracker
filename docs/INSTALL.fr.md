@@ -24,10 +24,10 @@ forme de « cookie ».
 
 1. Connectez-vous à wealthyexile.com dans votre navigateur.
 2. Dans la page de réglages, ouvrez l'onglet **Réglages**. À côté de **WealthyExile**, survolez
-   le **?** : il montre comment copier votre cookie (F12, Réseau, recharger, copier la ligne
-   Cookie).
-3. Collez-le dans la case, cliquez sur **Enregistrer le cookie**, puis **Tester**. Il doit dire
-   combien de divines vous avez.
+   le **?** : il montre les étapes (F12, Réseau, recharger, puis clic droit sur la première ligne,
+   **Copier**, puis **Copier en tant que cURL**).
+3. Collez-le dans la case et cliquez sur **Enregistrer le cookie**. Il est testé tout de suite et
+   doit dire combien de divines vous avez.
 
 Le cookie fonctionne comme un mot de passe : ne l'envoyez à personne, pas même à la personne qui a
 fait l'écran. Il est enregistré chiffré sur votre PC et ne part que vers WealthyExile. Quand
